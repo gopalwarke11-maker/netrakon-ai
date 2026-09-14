@@ -1,0 +1,1 @@
+"""In-memory service layer for Phase 1."""

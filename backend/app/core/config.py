@@ -1,0 +1,86 @@
+"""Centralized backend settings loaded from environment variables."""
+
+from functools import lru_cache
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "NETRAKON AI"
+    app_version: str = "0.1.0"
+    environment: str = "development"
+    debug: bool = True
+    host: str = "127.0.0.1"
+    port: int = 8000
+    api_prefix: str = "/api"
+    frontend_url: str = "http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173,http://127.0.0.1:5175"
+    database_url: str | None = None
+
+    # ── Phase 3: AI inference ──────────────────────────────────────────────
+    # Ultralytics model name or path.  Nano variant (~6 MB) is the default;
+    # swap for yolov8s.pt / yolov8m.pt for better accuracy at higher cost.
+    yolo_model_name: str = "yolov8n.pt"
+    # Minimum detection confidence [0, 1].  Requests may override this per-call.
+    yolo_conf_threshold: float = 0.25
+
+    # ── Phase 4: Object tracking ────────────────────────────────────────────
+    # ByteTrack config bundled with ultralytics.  BoT-SORT: "botsort.yaml".
+    yolo_tracker: str = "bytetrack.yaml"
+    # Default confidence for tracking (can be overridden per request).
+    track_conf_threshold: float = 0.25
+    # Maximum number of (center_x, center_y) positions stored per track.
+    # Prevents unbounded memory growth for long videos.
+    track_position_history_limit: int = 50
+    # Maximum video file size accepted by POST /api/ai/track (megabytes).
+    track_max_video_size_mb: int = 200
+
+    # ── Phase 10: Night Surveillance & Low-Light Enhancement ────────────────
+    # Enable low-light detection and enhancement preprocessing.
+    low_light_enabled: bool = True
+    # Mean grayscale luminance threshold below which a frame is considered low-light.
+    # Typical range: 50-100. Lower → stricter low-light detection.
+    low_light_threshold: float = 70.0
+    # CLAHE clip limit for contrast enhancement. Higher → more aggressive enhancement.
+    # Typical range: 1.0-4.0. Preserves texture; avoid values > 5.0 to prevent artifacts.
+    clahe_clip_limit: float = 2.0
+    # CLAHE tile grid size as "HxW" (e.g., "8x8").
+    # Larger tiles → smoother enhancement; smaller → more localized contrast.
+    clahe_tile_grid_size: str = "8x8"
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug(cls, value: object) -> object:
+        """Accept common deployment labels in addition to boolean env values.
+
+        Some launch profiles set ``DEBUG=release`` rather than a literal
+        boolean.  Treat production/release labels as false while preserving
+        Pydantic's normal validation for malformed values.
+        """
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod"}:
+                return False
+            if normalized in {"development", "dev"}:
+                return True
+        return value
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Return configured frontend origins, accepting comma-separated values."""
+        return [origin.strip() for origin in self.frontend_url.split(",") if origin.strip()]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

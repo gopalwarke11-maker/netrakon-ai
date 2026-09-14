@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+websockets
+pydantic
+pydantic-settings
+python-dotenv
+SQLAlchemy>=2.0
+psycopg[binary]>=3.1
+alembic>=1.13
+
+# Phase 3 — AI inference
+ultralytics
+opencv-python
+numpy
+python-multipart

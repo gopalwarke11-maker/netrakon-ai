@@ -1,0 +1,85 @@
+{
+  "camera_id": "CAM-02",
+  "real_video": true,
+  "video": {
+    "path": "D:\\sih\\netrakon-ai\\backend\\validation_input\\night_test.mp4",
+    "resolution": "1280x720",
+    "width": 1280,
+    "height": 720,
+    "fps": 25.0,
+    "frame_count": 1449,
+    "duration_seconds": 57.96,
+    "file_size_bytes": 5952051
+  },
+  "configuration": {
+    "yolo_model": "yolov8n.pt",
+    "tracker": "bytetrack.yaml",
+    "confidence": 0.25,
+    "low_light_enabled": true,
+    "low_light_threshold": 70.0,
+    "enhance_low_light": false,
+    "boundary_id": null,
+    "configured_boundary_ids": [
+      "BND-C2"
+    ]
+  },
+  "low_light": {
+    "sampled_frames": 1449,
+    "low_light_frames": 41,
+    "percentage_low_light": 2.83,
+    "average_luminance": 95.3
+  },
+  "detection": {
+    "total": 5382,
+    "per_frame": 3.714,
+    "average_confidence": 0.7821,
+    "class_counts": {
+      "kite": 41,
+      "car": 4273,
+      "person": 1068
+    }
+  },
+  "tracking": {
+    "unique_track_ids": 19,
+    "multi_frame_tracks": 17,
+    "multi_frame_track_ratio": 0.8947,
+    "average_track_duration": 283.263,
+    "maximum_track_duration": 1259,
+    "total_observations": 5382,
+    "identity_scope": "(camera_id, track_id)"
+  },
+  "intrusion": {
+    "status": "EXERCISED",
+    "events": 0,
+    "severity_distribution": {},
+    "direction_distribution": {}
+  },
+  "risk": {
+    "status": "NOT EXERCISED",
+    "assessments": 0,
+    "average_score": null,
+    "levels": {},
+    "events": []
+  },
+  "behavior": {
+    "status": "EXERCISED",
+    "observations": 44,
+    "types": {
+      "RAPID_MOVEMENT": 7,
+      "DIRECTION_REVERSAL": 14,
+      "ABNORMAL_MOVEMENT": 16,
+      "STATIONARY": 3,
+      "LOITERING": 4
+    },
+    "average_score": 34.432
+  },
+  "performance": {
+    "processing_seconds": 53.717,
+    "average_ms_per_frame": 35.177,
+    "estimated_fps": 28.427,
+    "local_hardware_validation": true
+  },
+  "errors": [],
+  "websocket": "EVENTS PUBLISHED BY PRODUCTION PATH",
+  "validated_at": "2026-09-12T17:51:26.638699+00:00"
+}

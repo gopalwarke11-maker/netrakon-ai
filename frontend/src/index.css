@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --netrakon-background: #0a0e14;
+  --netrakon-panel: #141a23;
+  --netrakon-border: #2a3441;
+  --netrakon-primary: #3b82f6;
+  --netrakon-text: #e6edf3;
+  --netrakon-secondary: #8b949e;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color: #e6edf3;
+  background: #0a0e14;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background: #0a0e14;
+  overflow-x: hidden;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--netrakon-primary);
+  outline-offset: 2px;
+}

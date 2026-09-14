@@ -1,0 +1,78 @@
+{
+  "camera_id": "CAM-01",
+  "real_video": true,
+  "video": {
+    "path": "D:\\sih\\netrakon-ai\\backend\\validation_input\\YOUR_NIGHT_VIDEO.mp4",
+    "resolution": "1280x720",
+    "width": 1280,
+    "height": 720,
+    "fps": 23.976,
+    "frame_count": 408,
+    "duration_seconds": 17.017,
+    "file_size_bytes": 6006209
+  },
+  "configuration": {
+    "yolo_model": "yolov8n.pt",
+    "tracker": "bytetrack.yaml",
+    "confidence": 0.25,
+    "low_light_enabled": true,
+    "low_light_threshold": 70.0,
+    "enhance_low_light": true,
+    "boundary_id": null
+  },
+  "low_light": {
+    "sampled_frames": 10,
+    "low_light_frames": 10,
+    "percentage_low_light": 100.0,
+    "average_luminance": 36.049
+  },
+  "detection": {
+    "total": 32,
+    "per_frame": 3.2,
+    "average_confidence": 0.576,
+    "class_counts": {
+      "car": 21,
+      "truck": 1,
+      "traffic light": 10
+    }
+  },
+  "tracking": {
+    "unique_track_ids": 7,
+    "multi_frame_tracks": 5,
+    "multi_frame_track_ratio": 0.7143,
+    "average_track_duration": 4.571,
+    "maximum_track_duration": 10,
+    "total_observations": 32,
+    "identity_scope": "(camera_id, track_id)"
+  },
+  "intrusion": {
+    "status": "NOT EXERCISED",
+    "events": 0,
+    "severity_distribution": {},
+    "direction_distribution": {}
+  },
+  "risk": {
+    "status": "NOT EXERCISED",
+    "assessments": 0,
+    "average_score": null,
+    "levels": {}
+  },
+  "behavior": {
+    "status": "EXERCISED",
+    "observations": 4,
+    "types": {
+      "RAPID_MOVEMENT": 2,
+      "ABNORMAL_MOVEMENT": 2
+    },
+    "average_score": 36.25
+  },
+  "performance": {
+    "processing_seconds": 3.335,
+    "average_ms_per_frame": 327.52,
+    "estimated_fps": 3.053,
+    "local_hardware_validation": true
+  },
+  "errors": [],
+  "websocket": "EVENTS PUBLISHED BY PRODUCTION PATH",
+  "validated_at": "2026-09-12T17:48:23.141893+00:00"
+}

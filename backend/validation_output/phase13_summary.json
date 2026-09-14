@@ -1,0 +1,74 @@
+{
+  "phase": 13,
+  "status": "PARTIAL",
+  "real_video_sources_available": 2,
+  "cameras": [
+    {
+      "camera_id": "CAM-01",
+      "video": "validation_input/YOUR_NIGHT_VIDEO.mp4",
+      "real_video": true,
+      "resolution": "1280x720",
+      "fps": 23.976,
+      "duration_seconds": 17.017,
+      "frames": 408,
+      "low_light_percentage": 100.0,
+      "average_luminance": 33.844,
+      "detections": 981,
+      "unique_tracks": 29,
+      "multi_frame_tracks": 26,
+      "intrusions": 6,
+      "risk_assessments": 6,
+      "behaviors": 25,
+      "processing_fps": 17.675,
+      "errors": [],
+      "intrusion_scenario": "Observed crossings against pre-existing configured CAM-01 boundaries; no boundary was invented by this validation."
+    },
+    {
+      "camera_id": "CAM-02",
+      "video": "validation_input/night_test.mp4",
+      "real_video": true,
+      "resolution": "1280x720",
+      "fps": 25.0,
+      "duration_seconds": 57.96,
+      "frames": 1449,
+      "low_light_percentage": 2.83,
+      "average_luminance": 95.3,
+      "detections": 5382,
+      "unique_tracks": 19,
+      "multi_frame_tracks": 17,
+      "intrusions": 0,
+      "risk_assessments": 0,
+      "behaviors": 44,
+      "processing_fps": 28.427,
+      "errors": [],
+      "intrusion_scenario": "INTRUSION SCENARIO NOT OBSERVED"
+    }
+  ],
+  "concurrent_real_video_validation": {
+    "frames_per_camera": 60,
+    "total_processing_seconds": 8.989,
+    "combined_fps": 13.349,
+    "cameras": {
+      "CAM-01": {
+        "frames": 60,
+        "detections": 150,
+        "active_tracks": 10,
+        "processing_fps": 8.55,
+        "status": "STOPPED",
+        "error": null
+      },
+      "CAM-02": {
+        "frames": 60,
+        "detections": 27,
+        "active_tracks": 3,
+        "processing_fps": 10.57,
+        "status": "STOPPED",
+        "error": null
+      }
+    }
+  },
+  "rtsp_hardware_validation": "NOT PERFORMED",
+  "browser_runtime_e2e": "NOT PERFORMED",
+  "production_scalability": "NOT CLAIMED",
+  "accuracy_claim": "NOT MADE; no ground-truth annotations"
+}
