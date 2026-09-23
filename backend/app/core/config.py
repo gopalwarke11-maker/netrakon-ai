@@ -14,7 +14,15 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     api_prefix: str = "/api"
-    frontend_url: str = "http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173,http://127.0.0.1:5175"
+    frontend_url: str = (
+        "https://netrakon-ai.netlify.app,"
+        "http://localhost:5173,"
+        "http://localhost:5174,"
+        "http://localhost:5175,"
+        "http://127.0.0.1:5173,"
+        "http://127.0.0.1:5174,"
+        "http://127.0.0.1:5175"
+    )
     database_url: str | None = None
 
     # ── Phase 3: AI inference ──────────────────────────────────────────────
@@ -74,8 +82,19 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        """Return configured frontend origins, accepting comma-separated values."""
-        return [origin.strip() for origin in self.frontend_url.split(",") if origin.strip()]
+        """Return configured frontend origins, accepting comma-separated values and stripping trailing slashes."""
+        raw_origins = [origin.strip().rstrip("/") for origin in self.frontend_url.split(",") if origin.strip()]
+        production_origin = "https://netrakon-ai.netlify.app"
+        if production_origin not in raw_origins:
+            raw_origins.append(production_origin)
+
+        seen: set[str] = set()
+        origins: list[str] = []
+        for origin in raw_origins:
+            if origin and origin not in seen:
+                seen.add(origin)
+                origins.append(origin)
+        return origins
 
 
 @lru_cache

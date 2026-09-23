@@ -112,3 +112,27 @@ def test_phase5_camera_boundary_integration(setup_lifespan):
     assert isinstance(boundaries, list)
     for b in boundaries:
         assert b["camera_id"] == "CAM-01"
+
+
+def test_cors_preflight_and_origin_headers(setup_lifespan):
+    """Verify CORS headers for production Netlify origin and preflight OPTIONS request."""
+    client = setup_lifespan
+    prod_origin = "https://netrakon-ai.netlify.app"
+
+    # Preflight request
+    headers = {
+        "Origin": prod_origin,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization,content-type",
+    }
+    r = client.options("/api/health", headers=headers)
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == prod_origin
+    assert r.headers.get("access-control-allow-credentials") == "true"
+
+    # Actual request with Origin
+    r = client.get("/api/health", headers={"Origin": prod_origin})
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == prod_origin
+    assert r.headers.get("access-control-allow-credentials") == "true"
+
