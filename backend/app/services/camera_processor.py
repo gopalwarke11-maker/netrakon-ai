@@ -20,7 +20,7 @@ import numpy as np
 
 from app.ai.low_light import get_processor
 from app.ai.behavior_engine import behavior_engine
-from app.ai.model_manager import create_model_instance
+from app.ai.model_manager import get_model
 from app.ai.tracker import TrackSession
 from app.services.alert_websocket import alert_connection_manager
 from app.services.behavior_service import behavior_service
@@ -166,7 +166,7 @@ class CameraProcessor:
         loop_enabled: bool = False,
         source_factory: Callable[[str | int, CameraSourceType | None], VideoSource] = create_video_source,
         session_factory: Callable[..., TrackSession] = TrackSession,
-        model_factory: Callable[[], Any] = create_model_instance,
+        model_factory: Callable[[], Any] = get_model,
     ) -> None:
         self.camera_id = camera_id
         self.source_value = source
@@ -214,6 +214,7 @@ class CameraProcessor:
         with self._lock:
             if self._thread and self._thread.is_alive():
                 raise RuntimeError(f"Camera '{self.camera_id}' is already running.")
+            logger.info("[CameraProcessor] Starting stream processing for camera '%s' (type: %s)", self.camera_id, self.source_type)
             self._set_status("CONNECTING", error=None)
             try:
                 self._source = self._source_factory(self.source_value, self.source_type)

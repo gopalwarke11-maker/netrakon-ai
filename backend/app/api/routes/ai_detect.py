@@ -54,16 +54,15 @@ async def detect_objects(
         HTTP 503: YOLO model not loaded (startup failure).
         HTTP 500: Unexpected inference error.
     """
-    # ── Guard: model must be loaded ──────────────────────────────────────────
-    if not model_manager.is_model_loaded():
-        logger.error("AI detection requested but YOLO model is not loaded")
+    # ── Guard: model must be ready / loadable ──────────────────────────────────
+    try:
+        model_manager.get_model()
+    except Exception as exc:
+        logger.error("AI detection requested but YOLO model failed to load: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "AI model is not available.  "
-                "The YOLO model may have failed to load at startup — check server logs."
-            ),
-        )
+            detail="AI model is not available. The YOLO model failed to initialize — check server logs.",
+        ) from exc
 
     # ── Validate content type ─────────────────────────────────────────────────
     allowed_types = {

@@ -8,6 +8,7 @@ without touching disk or network again.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import TYPE_CHECKING
 
@@ -19,81 +20,80 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _model: "YOLO | None" = None
+_model_lock = threading.Lock()
 
 
 def load_model() -> None:
-    """Load the configured YOLO model into memory.
+    """Load the configured YOLO model into memory lazily.
 
-    Reads ``settings.yolo_model_name`` (e.g. ``"yolov8n.pt"``).  Ultralytics
-    will download the model weights to its local cache the first time, then
-    reuse them on subsequent runs.
+    Reads ``settings.yolo_model_name`` (e.g. ``"yolov8n.pt"``). Ultralytics
+    will download or read local model weights, then cache the singleton instance.
 
     Raises:
         RuntimeError: If the model cannot be loaded for any reason.
     """
     global _model  # noqa: PLW0603
 
-    model_name = settings.yolo_model_name
-    logger.info("Loading YOLO model: %s", model_name)
-    t0 = time.perf_counter()
+    with _model_lock:
+        if _model is not None:
+            return
 
-    try:
-        from ultralytics import YOLO  # noqa: PLC0415 (lazy import — keeps startup fast if package missing)
+        model_name = settings.yolo_model_name
+        logger.info("[YOLO Lazy Load] Initializing YOLO model weights: %s", model_name)
+        t0 = time.perf_counter()
 
-        _model = YOLO(model_name)
+        try:
+            from ultralytics import YOLO  # noqa: PLC0415 (lazy import — keeps startup fast)
 
-        # Run a tiny warm-up inference so the first real request isn't slow.
-        import numpy as np  # noqa: PLC0415
+            instance = YOLO(model_name)
 
-        dummy = np.zeros((64, 64, 3), dtype=np.uint8)
-        _model.predict(source=dummy, conf=0.25, verbose=False)
+            # Run a tiny warm-up inference so the first real request isn't slow.
+            import numpy as np  # noqa: PLC0415
 
-    except Exception as exc:  # noqa: BLE001
-        _model = None
-        raise RuntimeError(f"Failed to load YOLO model '{model_name}': {exc}") from exc
+            dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+            instance.predict(source=dummy, conf=0.25, verbose=False)
+            _model = instance
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000
+        except Exception as exc:  # noqa: BLE001
+            _model = None
+            raise RuntimeError(f"Failed to load YOLO model '{model_name}': {exc}") from exc
 
-    # Log device info (CPU vs CUDA)
-    try:
-        device = str(_model.device)
-    except Exception:  # noqa: BLE001
-        device = "unknown"
+        elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    logger.info(
-        "YOLO model '%s' loaded successfully in %.0f ms  (device: %s)",
-        model_name,
-        elapsed_ms,
-        device,
-    )
+        # Log device info (CPU vs CUDA)
+        try:
+            device = str(_model.device)
+        except Exception:  # noqa: BLE001
+            device = "unknown"
+
+        logger.info(
+            "[YOLO Lazy Load] Model '%s' loaded successfully in %.0f ms (device: %s)",
+            model_name,
+            elapsed_ms,
+            device,
+        )
 
 
 def create_model_instance() -> "YOLO":
-    """Create an isolated YOLO instance using the configured model weights.
+    """Return the shared single YOLO model instance.
 
-    The shared startup model remains the default for existing API routes. Camera
-    processors use this factory so Ultralytics tracker state is not interleaved
-    between independent camera streams.
+    Previously created a duplicate model instance per camera. Now returns the
+    cached single model to strictly prevent exceeding the 512 MB RAM limit.
     """
-    from ultralytics import YOLO  # noqa: PLC0415
-
-    return YOLO(settings.yolo_model_name)
+    logger.debug("[YOLO Manager] Reusing single YOLO model singleton for stream/session")
+    return get_model()
 
 
 def get_model() -> "YOLO":
-    """Return the cached YOLO model.
-
-    Raises:
-        RuntimeError: If ``load_model()`` has not been called yet or failed.
-    """
+    """Return the cached YOLO model, initializing lazily if not loaded yet."""
     if _model is None:
-        raise RuntimeError(
-            "YOLO model is not loaded.  "
-            "Ensure load_model() was called during application startup."
-        )
+        load_model()
+    if _model is None:
+        raise RuntimeError("YOLO model failed to initialize.")
     return _model
 
 
 def is_model_loaded() -> bool:
-    """Return ``True`` if the model is ready for inference."""
+    """Return ``True`` if the model is currently loaded in memory."""
     return _model is not None
+

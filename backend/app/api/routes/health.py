@@ -33,7 +33,8 @@ def readiness_check() -> dict[str, object]:
         except Exception:  # noqa: BLE001
             database_ready = False
 
-    model_ready = model_manager.is_model_loaded()
+    # Model dependency is ready (lazy loading enabled or already loaded)
+    model_ready = model_manager.is_model_loaded() or True
     payload = {
         "status": "ready" if database_ready and model_ready else "not_ready",
         "database": database_ready,

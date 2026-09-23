@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Provide an explicit lifecycle hook for startup/shutdown resources."""
-    # ── Startup: load YOLO model into memory ───────────────────────────────
+    # ── Startup ─────────────────────────────────────────────────────────────
     alert_connection_manager.bind_loop(asyncio.get_running_loop())
     if engine is None:
         raise RuntimeError(
@@ -47,12 +47,8 @@ async def lifespan(_: FastAPI):
     except Exception as exc:
         logger.exception("Database connection failed. Run Alembic migrations and verify DATABASE_URL.")
         raise RuntimeError("Database connection failed; NETRAKON will not use in-memory fallback.") from exc
-    try:
-        model_manager.load_model()
-    except RuntimeError as exc:
-        # Keep the rest of the API alive even if the AI model fails to load.
-        # The /api/ai/detect endpoint will return 503 until the model is ready.
-        logger.error("YOLO model failed to load at startup: %s", exc)
+
+    logger.info("NETRAKON AI backend initialized (lightweight startup, YOLO lazy loading enabled).")
     yield
     # ── Shutdown (nothing to clean up yet) ──────────────────────────────
 
