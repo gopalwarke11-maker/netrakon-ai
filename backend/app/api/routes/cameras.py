@@ -172,6 +172,18 @@ def stream_camera_file(camera_id: str):
     camera = camera_service.get(camera_id)
     if camera is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    if camera.storage_key:
+        fresh_url = object_storage_service.get_presigned_download_url(camera.storage_key)
+        if fresh_url.startswith("/"):
+            # Local dev fallback mode
+            file_path = Path(settings.storage_dev_fallback_dir) / camera.storage_key
+            if file_path.is_file():
+                return FileResponse(
+                    file_path,
+                    media_type="video/mp4",
+                    headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+                )
+        return RedirectResponse(url=fresh_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
     source = camera.stream_url
     if not source:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera has no configured stream source")

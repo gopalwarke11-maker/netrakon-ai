@@ -134,12 +134,13 @@ def is_remote_video_url(source: str | int | None) -> bool:
 
 
 class FileVideoSource(OpenCVVideoSource):
-    """File video source supporting local paths and remote HTTP/HTTPS video URLs."""
+    """File video source supporting local paths, remote HTTP/HTTPS video URLs, and S3 storage keys."""
 
-    def __init__(self, source: str | int) -> None:
+    def __init__(self, source: str | int, storage_key: str | None = None) -> None:
         super().__init__(source, "FILE")
+        self.storage_key = storage_key
         self._temp_path: Path | None = None
-        self._is_remote: bool = is_remote_url(str(source) if isinstance(source, str) else source)
+        self._is_remote: bool = bool(storage_key) or is_remote_url(str(source) if isinstance(source, str) else source)
 
     @property
     def is_remote(self) -> bool:
@@ -150,7 +151,12 @@ class FileVideoSource(OpenCVVideoSource):
         return self._temp_path
 
     def _download_remote_file(self) -> Path:
-        url = str(self.source).strip()
+        if self.storage_key:
+            from app.services.object_storage import object_storage_service
+            url = object_storage_service.get_presigned_download_url(self.storage_key)
+        else:
+            url = str(self.source).strip()
+
         if not is_remote_url(url):
             raise ValueError(f"Invalid remote video URL: '{self.source}'")
 
@@ -184,7 +190,7 @@ class FileVideoSource(OpenCVVideoSource):
                 try:
                     self._temp_path = self._download_remote_file()
                 except Exception as exc:
-                    logger.error("Failed to download remote video from '%s': %s", self.source, exc)
+                    logger.error("Failed to download remote video for key '%s': %s", self.storage_key or self.source, exc)
                     return False
             self._capture = cv2.VideoCapture(str(self._temp_path))
             if not self.is_opened():
@@ -254,7 +260,11 @@ def infer_source_type(source: str | int, source_type: CameraSourceType | None = 
     return "FILE"
 
 
-def create_video_source(source: str | int, source_type: CameraSourceType | None = None) -> VideoSource:
+def create_video_source(
+    source: str | int,
+    source_type: CameraSourceType | None = None,
+    storage_key: str | None = None,
+) -> VideoSource:
     resolved = infer_source_type(source, source_type)
     if resolved not in {"FILE", "RTSP", "MJPEG", "DEVICE"}:
         raise ValueError(f"Unsupported camera source type: {resolved}")
@@ -264,7 +274,7 @@ def create_video_source(source: str | int, source_type: CameraSourceType | None 
         return MJPEGVideoSource(source)
     if resolved == "DEVICE":
         return CameraDeviceSource(int(source) if isinstance(source, str) and source.isdigit() else source)
-    return FileVideoSource(source)
+    return FileVideoSource(source, storage_key=storage_key)
 
 
 class CameraProcessor:
@@ -276,7 +286,8 @@ class CameraProcessor:
         source: str | int,
         source_type: CameraSourceType | None = None,
         loop_enabled: bool = False,
-        source_factory: Callable[[str | int, CameraSourceType | None], VideoSource] = create_video_source,
+        storage_key: str | None = None,
+        source_factory: Callable[..., VideoSource] = create_video_source,
         session_factory: Callable[..., TrackSession] = TrackSession,
         model_factory: Callable[[], Any] = get_model,
     ) -> None:
@@ -284,6 +295,7 @@ class CameraProcessor:
         self.source_value = source
         self.source_type = infer_source_type(source, source_type)
         self.loop_enabled = loop_enabled
+        self.storage_key = storage_key
         self._source_factory = source_factory
         self._session_factory = session_factory
         self._model_factory = model_factory
@@ -329,7 +341,10 @@ class CameraProcessor:
             logger.info("[CameraProcessor] Starting stream processing for camera '%s' (type: %s)", self.camera_id, self.source_type)
             self._set_status("CONNECTING", error=None)
             try:
-                self._source = self._source_factory(self.source_value, self.source_type)
+                try:
+                    self._source = self._source_factory(self.source_value, self.source_type, storage_key=self.storage_key)
+                except TypeError:
+                    self._source = self._source_factory(self.source_value, self.source_type)
                 opened = self._source.open()
                 if not opened and self.source_type not in {"RTSP", "MJPEG"}:
                     raise RuntimeError("Camera source could not be opened.")

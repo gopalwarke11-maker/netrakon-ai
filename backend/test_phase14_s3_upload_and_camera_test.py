@@ -10,6 +10,7 @@ from app.services.camera_connectivity import (
     is_private_ip,
     test_camera_stream_connectivity as run_connectivity_test,
 )
+from app.services.camera_processor import FileVideoSource
 from app.services.object_storage import object_storage_service
 
 client = TestClient(app)
@@ -68,6 +69,22 @@ def test_camera_connectivity_api_endpoint_private_lan():
     assert "private network" in data["message"].lower()
 
 
+def test_presigned_download_url_generation():
+    """Verify object_storage_service.get_presigned_download_url generates fresh download URLs."""
+    key = "uploads/20260924/test_file.mp4"
+    url = object_storage_service.get_presigned_download_url(key)
+    assert url is not None
+    assert key in url or "upload-fallback" in url
+
+
+def test_file_video_source_with_storage_key():
+    """Verify FileVideoSource recognizes storage_key and marks remote state."""
+    key = "uploads/20260924/test_file.mp4"
+    source = FileVideoSource("http://fallback.url/test.mp4", storage_key=key)
+    assert source.is_remote is True
+    assert source.storage_key == key
+
+
 def test_presigned_upload_url_flow(tmp_path: Path):
     """Verify requesting a presigned upload URL, performing upload, and confirming metadata storage."""
     # 1. Request presigned upload URL
@@ -85,7 +102,7 @@ def test_presigned_upload_url_flow(tmp_path: Path):
     # 2. Perform direct upload to upload_url (using dev fallback in local test mode)
     upload_url = upload_info["upload_url"]
     fake_mp4_bytes = b"\x00\x00\x00\x1cftypisom\x00\x00\x02\x00isomiso2avc1mp41"
-    
+
     put_resp = client.put(
         upload_url,
         content=fake_mp4_bytes,
@@ -111,6 +128,10 @@ def test_presigned_upload_url_flow(tmp_path: Path):
     assert cam_data["storage_metadata"] is not None
     assert cam_data["storage_metadata"]["file_size_bytes"] == len(fake_mp4_bytes)
 
-    # Clean up test camera
+    # 4. Stream endpoint redirect check for storage_key camera
     camera_id = cam_data["id"]
+    stream_resp = client.get(f"/api/cameras/{camera_id}/stream", follow_redirects=False)
+    assert stream_resp.status_code in {200, 307}
+
+    # Clean up test camera
     client.delete(f"/api/cameras/{camera_id}")

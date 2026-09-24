@@ -107,6 +107,28 @@ class ObjectStorageService:
             storage_type="LOCAL_DEV_FALLBACK",
         )
 
+    def get_presigned_download_url(self, object_key: str, expires_in: int = 86400) -> str:
+        """Generate a fresh presigned S3 GET URL for an object key on demand."""
+        if self.is_s3_configured():
+            try:
+                if settings.s3_public_url_prefix:
+                    prefix = settings.s3_public_url_prefix.rstrip("/")
+                    return f"{prefix}/{object_key}"
+                s3_client = self._get_s3_client()
+                url = s3_client.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": settings.s3_bucket_name, "Key": object_key},
+                    ExpiresIn=expires_in,
+                )
+                logger.info("Generated fresh presigned download URL for key: %s", object_key)
+                return url
+            except Exception as exc:
+                logger.error("Failed to generate presigned download URL for key '%s': %s", object_key, exc)
+                raise RuntimeError(f"Could not generate presigned download URL: {exc}") from exc
+
+        # Dev Fallback Mode
+        return f"/api/cameras/upload-fallback/{object_key}"
+
     def verify_and_get_stream_url(self, object_key: str) -> tuple[bool, str, dict[str, Any]]:
         """Verify uploaded object existence and return the stream URL and metadata.
 
@@ -125,15 +147,7 @@ class ObjectStorageService:
                 metadata["content_length"] = head.get("ContentLength")
                 metadata["content_type"] = head.get("ContentType")
 
-                if settings.s3_public_url_prefix:
-                    prefix = settings.s3_public_url_prefix.rstrip("/")
-                    stream_url = f"{prefix}/{object_key}"
-                else:
-                    stream_url = s3_client.generate_presigned_url(
-                        "get_object",
-                        Params={"Bucket": settings.s3_bucket_name, "Key": object_key},
-                        ExpiresIn=86400,
-                    )
+                stream_url = self.get_presigned_download_url(object_key)
                 return True, stream_url, metadata
             except Exception as exc:
                 logger.warning("S3 object key '%s' verification failed: %s", object_key, exc)

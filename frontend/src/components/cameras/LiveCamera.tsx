@@ -7,7 +7,6 @@ import {
   useCameraRuntimeSummary,
 } from "../../api/hooks";
 import {
-  getCameraStreamUrl,
   getProcessedCameraStreamUrl,
   startCamera,
 } from "../../api/cameras";
@@ -75,19 +74,23 @@ function LiveCamera({
 
       try {
         await startCamera(cameraId, sourceType === "FILE");
+        if (isMounted) {
+          setStatus("ready");
+          setErrorMessage("");
+        }
       } catch (error) {
         // A management view may have started this processor already.
-        if (!(error instanceof ApiError && error.status === 409)) {
+        if (error instanceof ApiError && error.status === 409) {
+          if (isMounted) {
+            setStatus("ready");
+            setErrorMessage("");
+          }
+        } else {
           if (isMounted) {
             setStatus("error");
             setErrorMessage("BACKEND PROCESSOR START FAILED");
           }
-          return;
         }
-      }
-
-      if (videoElement && sourceType === "FILE") {
-        videoElement.src = getCameraStreamUrl(cameraId);
       }
     };
 
@@ -183,24 +186,13 @@ function LiveCamera({
       </div>
 
       <div className="relative aspect-video overflow-hidden bg-[#080B10]">
-        {sourceType === "FILE" ? <video
-          ref={videoRef}
-          className={`h-full w-full object-cover ${videoVisible ? "block" : "hidden"}`}
-          autoPlay
-          playsInline
-          muted
-          controls
-          loop={processingQuery.data?.loop_enabled ?? false}
-          onLoadedData={handleVideoLoaded}
-          onError={handleVideoError}
-          aria-label={`${cameraId} live camera feed`}
-        /> : <img
+        <img
           className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
-          src={processorLive ? getProcessedCameraStreamUrl(cameraId) : undefined}
+          src={getProcessedCameraStreamUrl(cameraId)}
           onLoad={handleVideoLoaded}
           onError={handleVideoError}
           alt={`${cameraId} processed live camera feed`}
-        />}
+        />
         {!videoVisible && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-[#8B949E]">
             <Camera size={28} strokeWidth={1.25} aria-hidden="true" />

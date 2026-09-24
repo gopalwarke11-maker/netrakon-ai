@@ -30,7 +30,13 @@ def _ensure_registered(
     if selected_source is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Camera has no configured stream_url")
     selected_type = source_type or camera.source_type
-    return camera_manager.register(camera_id, selected_source, selected_type, loop_enabled=loop)  # type: ignore[arg-type]
+    return camera_manager.register(
+        camera_id,
+        selected_source,
+        selected_type,
+        loop_enabled=loop,
+        storage_key=camera.storage_key,
+    )  # type: ignore[arg-type]
 
 
 @router.get("/runtime/summaries", response_model=list[CameraRuntimeSummary])
