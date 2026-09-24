@@ -13,3 +13,5 @@ ultralytics
 opencv-python
 numpy
 python-multipart
+boto3
+

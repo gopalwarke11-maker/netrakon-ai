@@ -20,7 +20,50 @@ export interface ApiCamera {
   status: ApiCameraStatus;
   source_type: "FILE" | "RTSP" | "MJPEG" | "DEVICE";
   stream_url: string | null;
+  storage_key?: string | null;
+  storage_metadata?: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface ApiPresignedUploadRequest {
+  filename: string;
+  content_type?: string;
+  camera_id?: string;
+}
+
+export interface ApiPresignedUploadResponse {
+  upload_url: string;
+  object_key: string;
+  method: string;
+  headers: Record<string, string>;
+  storage_type: "S3" | "LOCAL_DEV_FALLBACK";
+}
+
+export interface ApiConfirmUploadRequest {
+  object_key: string;
+  camera_id?: string;
+  name?: string;
+  sector?: string;
+  location?: string;
+  file_size_bytes?: number;
+}
+
+export interface ApiCameraTestRequest {
+  source_type: "FILE" | "RTSP" | "MJPEG" | "DEVICE";
+  stream_url: string;
+}
+
+export interface ApiCameraTestResponse {
+  is_reachable: boolean;
+  status:
+    | "REACHABLE"
+    | "PRIVATE_NETWORK_NOT_REACHABLE"
+    | "UNREACHABLE"
+    | "INVALID_URL"
+    | "DEVICE_AVAILABLE"
+    | "DEVICE_UNAVAILABLE";
+  message: string;
+  details?: Record<string, unknown> | null;
 }
 
 export type ApiCameraRuntimeState =

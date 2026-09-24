@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     # Larger tiles → smoother enhancement; smaller → more localized contrast.
     clahe_tile_grid_size: str = "8x8"
 
+    # ── Phase 14: S3 Object Storage & Video Upload ─────────────────────────
+    s3_endpoint_url: str | None = None
+    s3_bucket_name: str = "netrakon-videos"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_region: str = "us-east-1"
+    s3_public_url_prefix: str | None = None
+    s3_presigned_expiration_seconds: int = 3600
+    storage_dev_fallback_dir: str = "videos"
+
     @field_validator("debug", mode="before")
     @classmethod
     def normalize_debug(cls, value: object) -> object:

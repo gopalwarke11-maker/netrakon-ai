@@ -18,6 +18,7 @@ export function cameraToRecord(camera: ApiCamera): CameraRecord {
           ? "FILE"
           : "NOT CONFIGURED"),
     streamUrl: camera.stream_url,
+    storageKey: camera.storage_key,
     showDetection: false,
   };
 }

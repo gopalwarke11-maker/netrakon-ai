@@ -16,6 +16,7 @@ dist-ssr
 # Python backend
 backend/venv/
 backend/.env
+backend/videos/
 .env
 __pycache__/
 *.pyc

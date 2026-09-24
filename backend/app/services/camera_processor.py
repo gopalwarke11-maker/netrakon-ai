@@ -8,12 +8,15 @@ cameras at the application boundary.
 from __future__ import annotations
 
 import logging
+import tempfile
 import threading
 import time
+import urllib.request
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import cv2
 import numpy as np
@@ -110,9 +113,116 @@ class OpenCVVideoSource(VideoSource):
         return float(self._capture.get(cv2.CAP_PROP_FPS) or 0.0) if self._capture else 0.0
 
 
+def is_remote_url(source: str | int | None) -> bool:
+    """Return True if source is an HTTP or HTTPS URL with valid scheme and host."""
+    if not isinstance(source, str):
+        return False
+    source = source.strip()
+    if not source.lower().startswith(("http://", "https://")):
+        return False
+    parsed = urlparse(source)
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+
+def is_remote_video_url(source: str | int | None) -> bool:
+    """Return True if source is an HTTP or HTTPS URL pointing to a video file."""
+    if not is_remote_url(source):
+        return False
+    parsed = urlparse(str(source).strip())
+    path = parsed.path.lower()
+    return any(path.endswith(ext) for ext in {".mp4", ".webm", ".mov", ".avi", ".mkv"})
+
+
 class FileVideoSource(OpenCVVideoSource):
+    """File video source supporting local paths and remote HTTP/HTTPS video URLs."""
+
     def __init__(self, source: str | int) -> None:
         super().__init__(source, "FILE")
+        self._temp_path: Path | None = None
+        self._is_remote: bool = is_remote_url(str(source) if isinstance(source, str) else source)
+
+    @property
+    def is_remote(self) -> bool:
+        return self._is_remote
+
+    @property
+    def temp_path(self) -> Path | None:
+        return self._temp_path
+
+    def _download_remote_file(self) -> Path:
+        url = str(self.source).strip()
+        if not is_remote_url(url):
+            raise ValueError(f"Invalid remote video URL: '{self.source}'")
+
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "NetraKon-AI/1.0"},
+        )
+        temp_file = tempfile.NamedTemporaryFile(prefix="netrakon_", suffix=".mp4", delete=False)
+        temp_path = Path(temp_file.name)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                status_code = getattr(response, "status", 200)
+                if status_code != 200:
+                    raise ValueError(f"HTTP {status_code} downloading remote video")
+                while True:
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
+                    temp_file.write(chunk)
+            temp_file.close()
+            return temp_path
+        except Exception:
+            temp_file.close()
+            if temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+            raise
+
+    def open(self) -> bool:
+        if self._is_remote:
+            if self._temp_path is None or not self._temp_path.is_file():
+                try:
+                    self._temp_path = self._download_remote_file()
+                except Exception as exc:
+                    logger.error("Failed to download remote video from '%s': %s", self.source, exc)
+                    return False
+            self._capture = cv2.VideoCapture(str(self._temp_path))
+            if not self.is_opened():
+                self.cleanup()
+                return False
+            return True
+        self._capture = cv2.VideoCapture(self.source)
+        return self.is_opened()
+
+    def rewind(self) -> bool:
+        if self._capture is not None:
+            self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, _ = self._capture.read()
+            if ok:
+                self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                return True
+        if self._capture is not None:
+            self._capture.release()
+        target = str(self._temp_path) if self._temp_path else self.source
+        self._capture = cv2.VideoCapture(str(target))
+        return self.is_opened()
+
+    def release(self) -> None:
+        super().release()
+        self.cleanup()
+
+    def cleanup(self) -> None:
+        if self._temp_path is not None:
+            try:
+                if self._temp_path.exists():
+                    self._temp_path.unlink()
+            except OSError as exc:
+                logger.warning("Failed to remove temp video file %s: %s", self._temp_path, exc)
+            finally:
+                self._temp_path = None
+
+    def __del__(self) -> None:
+        self.cleanup()
 
 
 class RTSPVideoSource(OpenCVVideoSource):
@@ -137,6 +247,8 @@ def infer_source_type(source: str | int, source_type: CameraSourceType | None = 
         return "DEVICE"
     if isinstance(source, str) and source.lower().startswith(("rtsp://", "rtsps://")):
         return "RTSP"
+    if isinstance(source, str) and is_remote_video_url(source):
+        return "FILE"
     if isinstance(source, str) and source.lower().startswith(("http://", "https://")):
         return "MJPEG"
     return "FILE"
@@ -403,6 +515,8 @@ class CameraProcessor:
                             self._last_detections = []
                             self._latest_processed_jpeg = None
                             self._status = self._status.model_copy(update={"active_tracks": 0})
+                        if hasattr(source, "rewind") and source.rewind():
+                            continue
                         source.release()
                         if source.open():
                             continue

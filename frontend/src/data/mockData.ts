@@ -8,6 +8,7 @@ export interface CameraRecord {
   status?: string;
   sourceType?: string;
   streamUrl?: string | null;
+  storageKey?: string | null;
   showDetection: boolean;
   detection?: {
     label: string;

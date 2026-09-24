@@ -24,6 +24,8 @@ class CameraRecord(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="ONLINE")
     source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="FILE")
     stream_url: Mapped[str | None] = mapped_column(String(500))
+    storage_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    storage_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     boundaries: Mapped[list[BoundaryRecord]] = relationship(back_populates="camera", passive_deletes=True)
