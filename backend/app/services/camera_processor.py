@@ -151,7 +151,9 @@ class FileVideoSource(OpenCVVideoSource):
         return self._temp_path
 
     def _download_remote_file(self) -> Path:
-        if self.storage_key:
+        if is_remote_url(str(self.source)):
+            url = str(self.source).strip()
+        elif self.storage_key:
             from app.services.object_storage import object_storage_service
             url = object_storage_service.get_presigned_download_url(self.storage_key)
         else:

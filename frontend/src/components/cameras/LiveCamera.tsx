@@ -7,7 +7,6 @@ import {
   useCameraRuntimeSummary,
 } from "../../api/hooks";
 import {
-  getCameraStreamUrl,
   getProcessedCameraStreamUrl,
   startCamera,
 } from "../../api/cameras";
@@ -75,14 +74,6 @@ function LiveCamera({
         return;
       }
 
-      if (isFileCamera) {
-        if (isMounted) {
-          setStatus("requesting");
-          setErrorMessage("");
-        }
-        return;
-      }
-
       try {
         await startCamera(cameraId, sourceType === "FILE");
         if (isMounted) {
@@ -123,30 +114,24 @@ function LiveCamera({
     framesProcessed > 0;
   const isLive = processorLive && status === "ready";
   const videoVisible = status === "ready";
-  const displayStatus = isFileCamera
-    ? status === "ready"
-      ? "READY"
-      : status === "error"
-        ? "ERROR"
-        : "LOADING"
-    : !hasSource
-      ? "CONFIGURED"
-      : processingQuery.data?.error || processingStatus === "ERROR"
-        ? "ERROR"
-        : processorLive
-          ? "LIVE"
-          : processingStatus === "ONLINE" || processingStatus === "PROCESSING"
-            ? "STARTING"
-            : processingStatus === "STOPPED" && framesProcessed > 0
-              ? sourceType === "FILE" && !processingQuery.data?.loop_enabled
-                ? "VIDEO ENDED"
-                : "STOPPED"
-              : processingStatus === "OFFLINE" && sourceType !== "FILE"
-                ? "OFFLINE"
-                : "STOPPED";
+  const displayStatus = !hasSource
+    ? "CONFIGURED"
+    : processingQuery.data?.error || processingStatus === "ERROR"
+      ? "ERROR"
+      : processorLive
+        ? "LIVE"
+        : processingStatus === "ONLINE" || processingStatus === "PROCESSING"
+          ? "STARTING"
+          : processingStatus === "STOPPED" && framesProcessed > 0
+            ? sourceType === "FILE" && !processingQuery.data?.loop_enabled
+              ? "VIDEO ENDED"
+              : "STOPPED"
+            : processingStatus === "OFFLINE" && sourceType !== "FILE"
+              ? "OFFLINE"
+              : "STOPPED";
 
   const statusTone =
-    displayStatus === "LIVE" || displayStatus === "READY"
+    displayStatus === "LIVE"
       ? "text-green-400"
       : displayStatus === "ERROR"
         ? "text-red-400"
@@ -202,32 +187,20 @@ function LiveCamera({
           className={`flex items-center gap-1.5 text-[9px] font-bold tracking-wider ${statusTone}`}
         >
           <span
-            className={`h-1.5 w-1.5 rounded-full ${displayStatus === "LIVE" || displayStatus === "READY" ? "bg-green-400" : "bg-yellow-300"}`}
+            className={`h-1.5 w-1.5 rounded-full ${displayStatus === "LIVE" ? "bg-green-400" : "bg-yellow-300"}`}
           />
           {displayStatus}
         </div>
       </div>
 
       <div className="relative aspect-video overflow-hidden bg-[#080B10]">
-        {isFileCamera ? (
-          <video
-            ref={videoRef}
-            className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
-            src={getCameraStreamUrl(cameraId)}
-            controls
-            playsInline
-            onLoadedData={handleVideoLoaded}
-            onError={handleVideoError}
-          />
-        ) : (
-          <img
-            className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
-            src={getProcessedCameraStreamUrl(cameraId)}
-            onLoad={handleVideoLoaded}
-            onError={handleVideoError}
-            alt={`${cameraId} processed live camera feed`}
-          />
-        )}
+        <img
+          className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
+          src={getProcessedCameraStreamUrl(cameraId)}
+          onLoad={handleVideoLoaded}
+          onError={handleVideoError}
+          alt={`${cameraId} processed live camera feed`}
+        />
         {!videoVisible && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-[#8B949E]">
             <Camera size={28} strokeWidth={1.25} aria-hidden="true" />

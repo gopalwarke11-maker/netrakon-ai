@@ -5,9 +5,6 @@ import type {
   ApiCameraRuntimeSummary,
   ApiCameraTestRequest,
   ApiCameraTestResponse,
-  ApiConfirmUploadRequest,
-  ApiPresignedUploadRequest,
-  ApiPresignedUploadResponse,
 } from "../types/api";
 
 export function getCameras() {
@@ -41,47 +38,84 @@ export function deleteCamera(cameraId: string) {
   });
 }
 
-export function getPresignedUploadUrl(payload: ApiPresignedUploadRequest) {
-  return apiFetch<ApiPresignedUploadResponse>(
-    "/api/cameras/presigned-upload-url",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-  );
+export interface CloudinaryUploadResponse {
+  secure_url: string;
+  public_id: string;
+  original_filename?: string;
+  bytes?: number;
+  duration?: number;
+  format?: string;
+  resource_type?: string;
 }
 
-export async function uploadFileToPresignedUrl(
-  uploadUrl: string,
+export async function uploadVideoToCloudinary(
   file: File,
-  headers: Record<string, string> = {},
-) {
-  const targetUrl = uploadUrl.startsWith("/")
-    ? `${apiBaseUrl}${uploadUrl}`
-    : uploadUrl;
-  const response = await fetch(targetUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "video/mp4",
-      ...headers,
-    },
-    body: file,
-  });
+): Promise<CloudinaryUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", "netrakon_videos");
+
+  const url = "https://api.cloudinary.com/v1_1/sbso5zkn/video/upload";
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+  } catch {
+    throw new Error("Failed to connect to Cloudinary upload service.");
+  }
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Direct video upload failed (${response.status}): ${errorText || response.statusText}`,
-    );
+    let errorMessage = `Cloudinary upload failed with status ${response.status}`;
+    try {
+      const errorData = (await response.json()) as { error?: { message?: string } };
+      if (errorData?.error?.message) {
+        errorMessage = `Cloudinary upload error: ${errorData.error.message}`;
+      }
+    } catch {
+      /* fallback to status text */
+    }
+    throw new Error(errorMessage);
   }
+
+  const data = (await response.json()) as CloudinaryUploadResponse;
+
+  if (!data.secure_url || typeof data.secure_url !== "string") {
+    throw new Error("Cloudinary response missing valid secure_url.");
+  }
+
+  if (!data.secure_url.startsWith("https://")) {
+    throw new Error("Cloudinary returned a non-HTTPS secure_url.");
+  }
+
+  return data;
 }
 
-export function confirmUpload(payload: ApiConfirmUploadRequest) {
-  return apiFetch<ApiCamera>("/api/cameras/confirm-upload", {
+export function uploadCameraVideo(
+  file: File,
+  details: {
+    name?: string;
+    sector?: string;
+    location?: string;
+    cameraId?: string;
+  } = {},
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (details.name) formData.append("name", details.name);
+  if (details.sector) formData.append("sector", details.sector);
+  if (details.location) formData.append("location", details.location);
+  if (details.cameraId) formData.append("camera_id", details.cameraId);
+
+  return apiFetch<ApiCamera>("/api/cameras/upload", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: formData,
   });
 }
+
+
 
 export function testCameraConnection(payload: ApiCameraTestRequest) {
   return apiFetch<ApiCameraTestResponse>("/api/cameras/test-connection", {

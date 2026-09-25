@@ -15,15 +15,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCameraStore } from "../../state/cameraStore";
 import { cameraToRecord } from "../../api/adapters";
 import {
-  confirmUpload,
   createCamera,
   deleteCamera,
-  getPresignedUploadUrl,
   startCamera,
   stopCamera,
   testCameraConnection,
   updateCamera,
-  uploadFileToPresignedUrl,
+  uploadVideoToCloudinary,
 } from "../../api/cameras";
 import { useCameras } from "../../api/hooks";
 import type {
@@ -57,7 +55,7 @@ function CameraManager() {
   const [testResult, setTestResult] = useState<ApiCameraTestResponse | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
-  // S3 Direct Upload state
+  // Direct Cloud Upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -119,42 +117,54 @@ function CameraManager() {
     }
     const name = form.name.trim() || selectedFile.name;
     const sector = form.sector.trim() || "Default Sector";
-    const location = form.location.trim() || "Uploaded Video";
+    const location = form.location.trim() || "Cloud Video";
 
     setIsUploading(true);
     setSubmitError(null);
-    setUploadProgress("Requesting S3 presigned upload URL...");
+    setUploadProgress("Uploading...");
 
     try {
-      const presigned = await getPresignedUploadUrl({
-        filename: selectedFile.name,
-        content_type: selectedFile.type || "video/mp4",
-        camera_id: editingId || undefined,
-      });
+      setUploadProgress("Uploading video to Cloudinary...");
+      const cloudData = await uploadVideoToCloudinary(selectedFile);
 
-      setUploadProgress(
-        `Uploading MP4 directly to ${presigned.storage_type === "S3" ? "S3 Object Storage" : "Storage"}...`,
-      );
-      await uploadFileToPresignedUrl(presigned.upload_url, selectedFile, presigned.headers);
-
-      setUploadProgress("Confirming upload with backend...");
-      await confirmUpload({
-        object_key: presigned.object_key,
-        camera_id: editingId || undefined,
+      setUploadProgress("Processing/creating camera...");
+      const cameraPayload = {
         name,
         sector,
         location,
-        file_size_bytes: selectedFile.size,
-      });
+        status: "ONLINE" as const,
+        source_type: "FILE" as const,
+        stream_url: cloudData.secure_url,
+        storage_key: cloudData.public_id,
+        storage_metadata: {
+          secure_url: cloudData.secure_url,
+          public_id: cloudData.public_id,
+          original_filename: cloudData.original_filename || selectedFile.name,
+          bytes: cloudData.bytes,
+          duration: cloudData.duration,
+          format: cloudData.format || "mp4",
+          resource_type: cloudData.resource_type || "video",
+          uploaded_at: new Date().toISOString(),
+        },
+      };
 
+      if (editingId) {
+        await updateCamera(editingId, cameraPayload);
+      } else {
+        await createCamera(cameraPayload);
+      }
+
+      setUploadProgress("Upload complete!");
       await queryClient.invalidateQueries({ queryKey: ["cameras"] });
       resetForm();
       await camerasQuery.refetch();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Direct S3 upload failed.");
+      const message =
+        error instanceof Error ? error.message : "Video upload failed.";
+      setSubmitError(`Upload failed: ${message}`);
+      setUploadProgress("Upload failed");
     } finally {
       setIsUploading(false);
-      setUploadProgress(null);
     }
   };
 
@@ -254,7 +264,7 @@ function CameraManager() {
         <div className="flex items-center gap-2">
           <Camera size={15} className="text-[#3B82F6]" aria-hidden="true" />
           <h2 className="text-xs font-semibold tracking-[0.15em]">
-            CAMERA MANAGEMENT & OBJECT STORAGE
+            CAMERA MANAGEMENT & CLOUD VIDEO STORAGE
           </h2>
         </div>
         <button
@@ -335,7 +345,7 @@ function CameraManager() {
             }
             className="mt-2 block h-8 w-full border border-[#2A3441] bg-[#0A0E14] px-2 text-xs text-[#E6EDF3]"
           >
-            <option value="FILE">FILE / S3 OBJECT</option>
+            <option value="FILE">FILE / CLOUD OBJECT</option>
             <option value="MJPEG">IP CAMERA / MJPEG</option>
             <option value="RTSP">RTSP STREAM</option>
             <option value="DEVICE">OPENCV DEVICE</option>
@@ -355,15 +365,15 @@ function CameraManager() {
             className="mt-2 h-8 w-full border border-[#2A3441] bg-[#0A0E14] px-2 text-xs text-[#E6EDF3]"
             placeholder={
               form.source_type === "FILE"
-                ? "https://s3.amazonaws.com/bucket/video.mp4 or videos/sample.mp4"
+                ? "https://res.cloudinary.com/... or videos/sample.mp4"
                 : "http://192.168.x.x:8080/video or rtsp://..."
             }
           />
         </label>
 
-        {/* S3 Direct Video Upload Option */}
+        {/* Cloud Video Upload Option */}
         <div className="flex flex-col justify-end text-[9px] font-bold text-[#8B949E] lg:col-span-2">
-          <span>OR DIRECT MP4 S3 UPLOAD</span>
+          <span>OR DIRECT MP4 CLOUD UPLOAD</span>
           <div className="mt-2 flex items-center gap-2">
             <input
               type="file"
@@ -379,7 +389,7 @@ function CameraManager() {
                 className="inline-flex items-center gap-1.5 bg-emerald-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50"
               >
                 <Upload size={12} />
-                {isUploading ? "UPLOADING..." : "UPLOAD TO S3"}
+                {isUploading ? "UPLOADING..." : "UPLOAD VIDEO"}
               </button>
             )}
           </div>
@@ -546,7 +556,7 @@ function CameraManager() {
       </div>
       <div className="flex items-center gap-2 border-t border-[#2A3441] px-4 py-3 text-[10px] text-[#8B949E]">
         <CircleDot size={13} className="text-[#3B82F6]" aria-hidden="true" />
-        Production uploads upload MP4 files directly from browser to S3 object storage via presigned URLs.
+        Production uploads stream MP4 video files to cloud storage for camera monitoring.
       </div>
     </section>
   );
