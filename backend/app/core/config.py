@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     database_url: str | None = None
 
     # ── Phase 3: AI inference ──────────────────────────────────────────────
-    # Ultralytics model name or path.  Nano variant (~6 MB) is the default;
-    # swap for yolov8s.pt / yolov8m.pt for better accuracy at higher cost.
-    yolo_model_name: str = "yolov8n.pt"
+    # ONNX model name or path. Nano variant (~12 MB ONNX) is the default;
+    # ONNX Runtime CPU engine provides < 200 MB RSS execution memory.
+    yolo_model_name: str = "yolov8n.onnx"
     # Minimum detection confidence [0, 1].  Requests may override this per-call.
     yolo_conf_threshold: float = 0.25
 

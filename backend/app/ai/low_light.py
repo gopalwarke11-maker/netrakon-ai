@@ -272,7 +272,7 @@ class LowLightProcessor:
             metadata["enhancement_applied"] = True
             metadata["enhancement_method"] = "CLAHE"
         else:
-            processed_frame = frame.copy()
+            processed_frame = frame
 
         return processed_frame, metadata
 

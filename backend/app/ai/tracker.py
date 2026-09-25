@@ -1,18 +1,8 @@
 """ByteTrack-powered object tracking session.
 
-A ``TrackSession`` wraps the shared YOLO model and processes video frames
-one at a time, maintaining persistent Track IDs across frames via
-Ultralytics' ``persist=True`` flag.
-
-Design principle
-----------------
-The model is loaded once at startup (by ``model_manager``).  Calling
-``model.track(..., persist=True)`` on the same model object between frames
-causes Ultralytics to keep the ByteTrack state alive internally — the same
-physical object receives the same Track ID as long as the tracker can match it.
-
-This is the correct session-oriented approach.  Do NOT create a new model
-instance per frame or per session.
+A ``TrackSession`` wraps the ONNX inference engine and processes video frames
+one at a time, maintaining persistent Track IDs across frames via a pure-NumPy
+ByteTrack tracker.
 """
 
 from __future__ import annotations
@@ -24,7 +14,8 @@ from typing import Any
 import cv2
 import numpy as np
 
-from app.ai.model_manager import get_model
+from app.ai.bytetrack import ByteTracker
+from app.ai.onnx_engine import detect_objects
 from app.ai.schemas import BoundingBoxAI, TrackFrame, TrackedObject
 from app.ai.track_history import TrackHistory
 from app.core.config import settings
@@ -50,7 +41,7 @@ class TrackSession:
         model: Any | None = None,
     ) -> None:
         self._conf = conf if conf is not None else settings.track_conf_threshold
-        self._tracker = settings.yolo_tracker
+        self._tracker_name = settings.yolo_tracker
         self._session_id = session_id
         self._camera_id = camera_id
         self._model = model
@@ -62,14 +53,14 @@ class TrackSession:
                 else settings.track_position_history_limit
             )
         )
+        self._byte_tracker = ByteTracker(high_thresh=self._conf)
         logger.info(
             "TrackSession '%s' created  (conf=%.2f, tracker=%s, camera_id=%s)",
             session_id,
             self._conf,
-            self._tracker,
+            self._tracker_name,
             self._camera_id,
         )
-
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -79,7 +70,7 @@ class TrackSession:
         frame_number: int,
         timestamp_ms: float = 0.0,
     ) -> TrackFrame:
-        """Run YOLO + ByteTrack on one BGR frame.
+        """Run ONNX detection + ByteTrack on one BGR frame.
 
         Args:
             frame: OpenCV BGR image array (H, W, 3).
@@ -90,80 +81,62 @@ class TrackSession:
             A :class:`TrackFrame` with all tracked objects and timing info.
 
         Raises:
-            RuntimeError: If the YOLO model is not loaded.
             ValueError: If ``frame`` is empty/invalid.
         """
         if frame is None or frame.size == 0:
             raise ValueError("Received an empty or invalid frame.")
 
         image_height, image_width = frame.shape[:2]
-        model = self._model or get_model()
-
         t0 = time.perf_counter()
 
-        # persist=True is the critical flag — keeps ByteTrack state between calls
-        results = model.track(
-            source=frame,
-            conf=self._conf,
-            tracker=self._tracker,
-            persist=True,
-            verbose=False,
-        )
+        # 1. Run ONNX object detection
+        onnx_detections, _ = detect_objects(frame, conf_threshold=self._conf)
+
+        # 2. Run ByteTrack state tracking
+        stracks = self._byte_tracker.update(onnx_detections, frame_number)
 
         processing_time_ms = (time.perf_counter() - t0) * 1000
 
         tracked_objects: list[TrackedObject] = []
 
-        if results:
-            result = results[0]
-            boxes = result.boxes
+        for strack in stracks:
+            x1, y1, x2, y2 = strack.x1, strack.y1, strack.x2, strack.y2
+            cx = (x1 + x2) / 2.0
+            cy = (y1 + y2) / 2.0
 
-            if boxes is not None and boxes.id is not None:
-                # boxes.id is None when the tracker hasn't assigned IDs yet
-                ids = boxes.id.int().tolist()
-                xyxys = boxes.xyxy.tolist()
-                confs = boxes.conf.tolist()
-                classes = boxes.cls.int().tolist()
+            bbox = BoundingBoxAI(
+                x1=round(x1, 2),
+                y1=round(y1, 2),
+                x2=round(x2, 2),
+                y2=round(y2, 2),
+                width=round(x2 - x1, 2),
+                height=round(y2 - y1, 2),
+            )
 
-                for track_id, xyxy, conf, cls_id in zip(ids, xyxys, confs, classes):
-                    x1, y1, x2, y2 = xyxy
-                    cx = (x1 + x2) / 2.0
-                    cy = (y1 + y2) / 2.0
-                    cls_name = model.names.get(cls_id, str(cls_id))
+            tracked_objects.append(
+                TrackedObject(
+                    track_id=strack.track_id,
+                    class_id=strack.class_id,
+                    class_name=strack.class_name,
+                    confidence=round(float(strack.confidence), 4),
+                    bounding_box=bbox,
+                    center_x=round(cx, 2),
+                    center_y=round(cy, 2),
+                    frame_number=frame_number,
+                    image_width=image_width,
+                    image_height=image_height,
+                )
+            )
 
-                    bbox = BoundingBoxAI(
-                        x1=round(x1, 2),
-                        y1=round(y1, 2),
-                        x2=round(x2, 2),
-                        y2=round(y2, 2),
-                        width=round(x2 - x1, 2),
-                        height=round(y2 - y1, 2),
-                    )
-
-                    tracked_objects.append(
-                        TrackedObject(
-                            track_id=track_id,
-                            class_id=cls_id,
-                            class_name=cls_name,
-                            confidence=round(float(conf), 4),
-                            bounding_box=bbox,
-                            center_x=round(cx, 2),
-                            center_y=round(cy, 2),
-                            frame_number=frame_number,
-                            image_width=image_width,
-                            image_height=image_height,
-                        )
-                    )
-
-                    # Update persistent history
-                    self._history.update(
-                        track_id=track_id,
-                        class_name=cls_name,
-                        frame_number=frame_number,
-                        center_x=cx,
-                        center_y=cy,
-                        bbox=bbox,
-                    )
+            # Update persistent track history
+            self._history.update(
+                track_id=strack.track_id,
+                class_name=strack.class_name,
+                frame_number=frame_number,
+                center_x=cx,
+                center_y=cy,
+                bbox=bbox,
+            )
 
         # Evaluate virtual boundaries if camera_id is configured
         if self._camera_id and tracked_objects:
@@ -210,13 +183,12 @@ class TrackSession:
         return self._intrusions
 
     def close(self) -> None:
-        """Release session resources (reserved for future cleanup)."""
+        """Release session resources."""
         if self._camera_id:
             from app.ai.intrusion_detector import intrusion_detector
             intrusion_detector.clear_camera(self._camera_id)
         logger.info(
-
-            "TrackSession '%s' closed.  Total unique tracks: %d",
+            "TrackSession '%s' closed. Total unique tracks: %d",
             self._session_id,
             len(self._history),
         )

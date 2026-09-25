@@ -416,7 +416,6 @@ class CameraProcessor:
         enhanced_frame, _ = get_processor().process_frame(frame, enable_enhancement=True)
         tracked = session.process_frame(frame=enhanced_frame, frame_number=frame_number)
         self._analyze_behaviors()
-        annotated = enhanced_frame.copy()
         for detection in tracked.objects:
             box = getattr(detection, "bounding_box", None)
             if box is None:
@@ -425,9 +424,9 @@ class CameraProcessor:
             bottom_right = (int(box.x2), int(box.y2))
             class_name = getattr(detection, "class_name", "OBJECT")
             label = f"{class_name.upper()} {detection.confidence:.0%} | TRACK {detection.track_id}"
-            cv2.rectangle(annotated, top_left, bottom_right, (0, 165, 255), 2)
+            cv2.rectangle(enhanced_frame, top_left, bottom_right, (0, 165, 255), 2)
             cv2.putText(
-                annotated,
+                enhanced_frame,
                 label,
                 (top_left[0], max(18, top_left[1] - 6)),
                 cv2.FONT_HERSHEY_SIMPLEX,
@@ -435,7 +434,7 @@ class CameraProcessor:
                 (0, 165, 255),
                 2,
             )
-        encoded_ok, encoded = cv2.imencode(".jpg", annotated)
+        encoded_ok, encoded = cv2.imencode(".jpg", enhanced_frame)
         with self._lock:
             self._record_frame(tracked.processing_time_ms, tracked.objects)
             if encoded_ok:
@@ -501,6 +500,7 @@ class CameraProcessor:
     def _run(self) -> None:
         try:
             while not self._stop_event.is_set():
+                frame_start_time = time.perf_counter()
                 source = self._source
                 if source is None:
                     break
@@ -551,6 +551,13 @@ class CameraProcessor:
                             self._set_status("ERROR", error="Camera source returned no frames.")
                     break
                 self.process_once(frame)
+
+                # Throttle file/MP4 processing to ~10 FPS (0.10s interval) to prevent memory OOM spikes on memory-constrained deployments (e.g. Render Free Tier 512MB RAM limit).
+                if self.source_type == "FILE":
+                    elapsed = time.perf_counter() - frame_start_time
+                    remaining = 0.10 - elapsed
+                    if remaining > 0 and self._stop_event.wait(remaining):
+                        break
             with self._lock:
                 if not self._stop_event.is_set() and self._status.status != "ERROR":
                     self._set_status("STOPPED", error=None)

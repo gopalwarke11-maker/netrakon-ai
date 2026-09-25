@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from app.ai.model_manager import get_model
+from app.ai.onnx_engine import detect_objects
 from app.ai.schemas import BoundingBoxAI, DetectResponse, DetectionResult
 from app.ai.low_light import get_processor
 from app.core.config import settings
@@ -72,49 +73,20 @@ def run_detection(
                 low_light_metadata["threshold"],
             )
 
-    # ── 3. Run inference ─────────────────────────────────────────────────────
-    model = get_model()
-    t0 = time.perf_counter()
+    # ── 3. Run ONNX inference ─────────────────────────────────────────────────────
+    onnx_dets, processing_time_ms = detect_objects(frame, conf_threshold=conf_threshold)
 
-    results = model.predict(
-        source=frame,
-        conf=conf_threshold,
-        verbose=False,
-    )
-
-    processing_time_ms = (time.perf_counter() - t0) * 1000
-
-    # ── 4. Convert raw YOLO results → application schemas ────────────────────
+    # ── 4. Convert ONNX results → application schemas ────────────────────────────
     detections: list[DetectionResult] = []
-
-    if results:
-        result = results[0]  # single-image prediction → one Results object
-        boxes = result.boxes
-
-        if boxes is not None:
-            for box in boxes:
-                # xyxy tensor shape: (1, 4)
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls_id = int(box.cls[0])
-                cls_name = model.names.get(cls_id, str(cls_id))
-
-                bbox = BoundingBoxAI(
-                    x1=round(x1, 2),
-                    y1=round(y1, 2),
-                    x2=round(x2, 2),
-                    y2=round(y2, 2),
-                    width=round(x2 - x1, 2),
-                    height=round(y2 - y1, 2),
-                )
-                detections.append(
-                    DetectionResult(
-                        class_id=cls_id,
-                        class_name=cls_name,
-                        confidence=round(conf, 4),
-                        bounding_box=bbox,
-                    )
-                )
+    for det in onnx_dets:
+        detections.append(
+            DetectionResult(
+                class_id=det.class_id,
+                class_name=det.class_name,
+                confidence=det.confidence,
+                bounding_box=det.bounding_box,
+            )
+        )
 
     logger.info(
         "Inference complete: %d detection(s) in %.1f ms (conf≥%.2f, image %dx%d)",
