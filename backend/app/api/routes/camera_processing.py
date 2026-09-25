@@ -100,7 +100,7 @@ def camera_status(camera_id: str) -> CameraProcessingStatus:
 
 @router.get("/{camera_id}/summary", response_model=CameraRuntimeSummary)
 def camera_summary(camera_id: str) -> CameraRuntimeSummary:
-    _camera_or_404(camera_id)
+    camera = _camera_or_404(camera_id)
     processor = camera_manager.get(camera_id)
     if processor is None:
         return CameraRuntimeSummary(camera_id=camera_id, status="OFFLINE", source_type=camera.source_type)
