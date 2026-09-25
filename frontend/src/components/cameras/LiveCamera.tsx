@@ -7,6 +7,7 @@ import {
   useCameraRuntimeSummary,
 } from "../../api/hooks";
 import {
+  getCameraStreamUrl,
   getProcessedCameraStreamUrl,
   startCamera,
 } from "../../api/cameras";
@@ -55,6 +56,8 @@ function LiveCamera({
   const sessionDetections = summaryQuery.data?.total_detections;
   const historicalTracks = summaryQuery.data?.historical_tracks.length;
 
+  const isFileCamera = sourceType === "FILE";
+
   useEffect(() => {
     let isMounted = true;
     const videoElement = videoRef.current;
@@ -68,6 +71,14 @@ function LiveCamera({
               ? "NO CONFIGURED SOURCE // PROCESSOR STATUS ONLY"
               : "NO BROWSER STREAM // PROCESSOR STATUS ONLY",
           );
+        }
+        return;
+      }
+
+      if (isFileCamera) {
+        if (isMounted) {
+          setStatus("requesting");
+          setErrorMessage("");
         }
         return;
       }
@@ -103,7 +114,7 @@ function LiveCamera({
         videoElement.removeAttribute("src");
       }
     };
-  }, [cameraId, sourceType, streamUrl]);
+  }, [cameraId, isFileCamera, sourceType, streamUrl]);
 
   const framesProcessed = processingQuery.data?.frames_processed ?? 0;
   const hasSource = Boolean(streamUrl);
@@ -112,23 +123,35 @@ function LiveCamera({
     framesProcessed > 0;
   const isLive = processorLive && status === "ready";
   const videoVisible = status === "ready";
-  const displayStatus = !hasSource
-    ? "CONFIGURED"
-    : processingQuery.data?.error || processingStatus === "ERROR"
-      ? "ERROR"
-      : processorLive
-        ? "LIVE"
-        : processingStatus === "ONLINE" || processingStatus === "PROCESSING"
-          ? "STARTING"
-          : processingStatus === "STOPPED" && framesProcessed > 0
-            ? sourceType === "FILE" && !processingQuery.data?.loop_enabled
-              ? "VIDEO ENDED"
-              : "STOPPED"
-            : processingStatus === "OFFLINE" && sourceType !== "FILE"
-              ? "OFFLINE"
-              : "STOPPED";
+  const displayStatus = isFileCamera
+    ? status === "ready"
+      ? "READY"
+      : status === "error"
+        ? "ERROR"
+        : "LOADING"
+    : !hasSource
+      ? "CONFIGURED"
+      : processingQuery.data?.error || processingStatus === "ERROR"
+        ? "ERROR"
+        : processorLive
+          ? "LIVE"
+          : processingStatus === "ONLINE" || processingStatus === "PROCESSING"
+            ? "STARTING"
+            : processingStatus === "STOPPED" && framesProcessed > 0
+              ? sourceType === "FILE" && !processingQuery.data?.loop_enabled
+                ? "VIDEO ENDED"
+                : "STOPPED"
+              : processingStatus === "OFFLINE" && sourceType !== "FILE"
+                ? "OFFLINE"
+                : "STOPPED";
+
   const statusTone =
-    displayStatus === "LIVE" ? "text-green-400" : "text-yellow-300";
+    displayStatus === "LIVE" || displayStatus === "READY"
+      ? "text-green-400"
+      : displayStatus === "ERROR"
+        ? "text-red-400"
+        : "text-yellow-300";
+
   const backendDetectionState = processorLive
     ? "ON"
     : processingStatus === "STOPPED" && framesProcessed > 0
@@ -179,20 +202,32 @@ function LiveCamera({
           className={`flex items-center gap-1.5 text-[9px] font-bold tracking-wider ${statusTone}`}
         >
           <span
-            className={`h-1.5 w-1.5 rounded-full ${displayStatus === "LIVE" ? "bg-green-400" : "bg-yellow-300"}`}
+            className={`h-1.5 w-1.5 rounded-full ${displayStatus === "LIVE" || displayStatus === "READY" ? "bg-green-400" : "bg-yellow-300"}`}
           />
           {displayStatus}
         </div>
       </div>
 
       <div className="relative aspect-video overflow-hidden bg-[#080B10]">
-        <img
-          className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
-          src={getProcessedCameraStreamUrl(cameraId)}
-          onLoad={handleVideoLoaded}
-          onError={handleVideoError}
-          alt={`${cameraId} processed live camera feed`}
-        />
+        {isFileCamera ? (
+          <video
+            ref={videoRef}
+            className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
+            src={getCameraStreamUrl(cameraId)}
+            controls
+            playsInline
+            onLoadedData={handleVideoLoaded}
+            onError={handleVideoError}
+          />
+        ) : (
+          <img
+            className={`h-full w-full object-contain ${videoVisible ? "block" : "hidden"}`}
+            src={getProcessedCameraStreamUrl(cameraId)}
+            onLoad={handleVideoLoaded}
+            onError={handleVideoError}
+            alt={`${cameraId} processed live camera feed`}
+          />
+        )}
         {!videoVisible && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-[#8B949E]">
             <Camera size={28} strokeWidth={1.25} aria-hidden="true" />
@@ -201,8 +236,8 @@ function LiveCamera({
             </span>
           </div>
         )}
-        {videoVisible && (
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/75 px-2 py-1 text-[8px] font-bold tracking-[0.14em] text-[#8B949E]">
+        {videoVisible && !isFileCamera && (
+          <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/75 px-2 py-1 text-[8px] font-bold tracking-[0.14em] text-[#8B949E]">
             {!showDetection
               ? "DETECTION DISPLAY OFF"
               : visibleDetections.length
@@ -214,12 +249,12 @@ function LiveCamera({
           visible={isLive && showDetection}
           detections={visibleDetections}
         />
-        <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-1 font-mono text-[10px] text-[#E6EDF3]">
+        <div className="pointer-events-none absolute bottom-2 left-2 bg-black/70 px-2 py-1 font-mono text-[10px] text-[#E6EDF3]">
           {cameraId}
         </div>
-        <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-[9px] font-semibold text-cyan-300">
+        <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-[9px] font-semibold text-cyan-300">
           <Radio size={11} aria-hidden="true" />
-          AI MONITORING
+          {isFileCamera ? "VIDEO PLAYER" : "AI MONITORING"}
         </div>
         {isFullscreen && (
           <>
@@ -231,7 +266,7 @@ function LiveCamera({
               <Minimize2 size={11} aria-hidden="true" />
               CLOSE VIEW
             </button>
-            <div className="absolute bottom-2 right-2 bg-black/75 px-2 py-1 font-mono text-[9px] text-[#8B949E]">
+            <div className="pointer-events-none absolute bottom-2 right-2 bg-black/75 px-2 py-1 font-mono text-[9px] text-[#8B949E]">
               DETECTION {showDetection ? "ON" : "OFF"} // TRACKING UI // REC
               READY
             </div>
@@ -280,3 +315,4 @@ function LiveCamera({
 }
 
 export default LiveCamera;
+
