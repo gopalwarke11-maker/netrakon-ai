@@ -50,3 +50,22 @@ select:focus-visible {
   outline: 2px solid var(--netrakon-primary);
   outline-offset: 2px;
 }
+
+/* Custom NetraKon Dark Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0e14;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3441;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
+}

@@ -75,17 +75,19 @@ function CameraGrid() {
         </div>
       )}
       <CameraControls onFullscreen={() => void handleFullscreen()} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {cameras.map((camera) => (
-          <LiveCamera
-            key={camera.cameraId}
-            {...camera}
-            cameraStatus={camera.status}
-            showDetection={detectionEnabled}
-            isSelected={camera.cameraId === selectedCamera}
-            onSelect={() => setSelectedCamera(camera.cameraId)}
-          />
-        ))}
+      <div className="max-h-[620px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {cameras.map((camera) => (
+            <LiveCamera
+              key={camera.cameraId}
+              {...camera}
+              cameraStatus={camera.status}
+              showDetection={detectionEnabled}
+              isSelected={camera.cameraId === selectedCamera}
+              onSelect={() => setSelectedCamera(camera.cameraId)}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );

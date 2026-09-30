@@ -76,6 +76,22 @@ class TrackBoundaryState:
     alert_emitted: bool = False
 
 
+import threading
+
+@dataclass
+class TrackBoundaryState:
+    """State record for a single track with respect to a single boundary."""
+    camera_id: str
+    boundary_id: str
+    track_id: int
+    state: IntrusionState = "SAFE"
+    last_anchor: tuple[float, float] | None = None
+    last_side: Literal["positive", "negative", "on_line"] = "on_line"
+    last_seen_frame: int = 0
+    consecutive_frames_inside: int = 0
+    alert_emitted: bool = False
+
+
 class IntrusionDetector:
     """Stateful intrusion detector evaluating active boundaries against tracked objects."""
 
@@ -84,22 +100,28 @@ class IntrusionDetector:
         self._states: dict[tuple[str, str, int], TrackBoundaryState] = {}
         self._max_idle_frames = max_idle_frames
         self._events: list[IntrusionEvent] = []
+        self._published_alert_ids: set[str] = set()
+        self._lock = threading.RLock()
 
     def clear(self) -> None:
         """Reset all tracking states and events (useful for tests)."""
-        self._states.clear()
-        self._events.clear()
+        with self._lock:
+            self._states.clear()
+            self._events.clear()
+            self._published_alert_ids.clear()
 
     def clear_camera(self, camera_id: str) -> None:
         """Clear transient state and events owned by one camera only."""
-        self._states = {
-            key: state for key, state in self._states.items() if state.camera_id != camera_id
-        }
-        self._events = [event for event in self._events if event.camera_id != camera_id]
+        with self._lock:
+            self._states = {
+                key: state for key, state in self._states.items() if state.camera_id != camera_id
+            }
+            self._events = [event for event in self._events if event.camera_id != camera_id]
 
     def get_events(self) -> list[IntrusionEvent]:
         """Return all recorded intrusion events."""
-        return list(self._events)
+        with self._lock:
+            return list(self._events)
 
     def process_tracks(
         self,
@@ -109,47 +131,35 @@ class IntrusionDetector:
         boundaries: list[VirtualBoundary],
         timestamp: datetime | None = None,
     ) -> list[IntrusionEvent]:
-        """Evaluate tracked objects against active boundaries for a given camera frame.
-
-        Args:
-            camera_id: Identifier of the camera streaming this frame.
-            frame_number: 1-based frame index.
-            tracked_objects: List of TrackedObject instances from ByteTrack.
-            boundaries: Active boundaries configured for this camera.
-            timestamp: Optional frame timestamp; defaults to current UTC.
-
-        Returns:
-            List of new IntrusionEvent instances generated in this frame.
-        """
+        """Evaluate tracked objects against active boundaries for a given camera frame."""
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
-        new_events: list[IntrusionEvent] = []
-        active_boundaries = [b for b in boundaries if b.enabled and b.camera_id == camera_id]
+        with self._lock:
+            new_events: list[IntrusionEvent] = []
+            active_boundaries = [b for b in boundaries if b.enabled and b.camera_id == camera_id]
 
-        if not active_boundaries or not tracked_objects:
-            # Clean up old tracks periodically
+            if not active_boundaries or not tracked_objects:
+                self._prune_stale_states(frame_number, camera_id)
+                return new_events
+
+            for boundary in active_boundaries:
+                for obj in tracked_objects:
+                    anchor = get_bottom_center_anchor(obj.bounding_box)
+
+                    event = self._evaluate_track_boundary(
+                        camera_id=camera_id,
+                        boundary=boundary,
+                        obj=obj,
+                        curr_anchor=anchor,
+                        frame_number=frame_number,
+                        timestamp=timestamp,
+                    )
+                    if event is not None:
+                        new_events.append(event)
+
             self._prune_stale_states(frame_number, camera_id)
             return new_events
-
-        for boundary in active_boundaries:
-            for obj in tracked_objects:
-                track_id = obj.track_id
-                anchor = get_bottom_center_anchor(obj.bounding_box)
-
-                event = self._evaluate_track_boundary(
-                    camera_id=camera_id,
-                    boundary=boundary,
-                    obj=obj,
-                    curr_anchor=anchor,
-                    frame_number=frame_number,
-                    timestamp=timestamp,
-                )
-                if event is not None:
-                    new_events.append(event)
-
-        self._prune_stale_states(frame_number, camera_id)
-        return new_events
 
     def _evaluate_track_boundary(
         self,
@@ -186,25 +196,18 @@ class IntrusionDetector:
                 last_seen_frame=frame_number,
                 alert_emitted=(initial_state == "ALERTED"),
             )
-            # Note: Object appearing already inside the restricted zone on first frame is initialized
-            # without triggering crossing event to avoid false alarms from initial detection flicker.
             return None
 
         prev_anchor = state_rec.last_anchor or curr_anchor
-        prev_side = state_rec.last_side
-
-        # Update last seen
         state_rec.last_seen_frame = frame_number
         state_rec.last_anchor = curr_anchor
 
         # ── State 1: Already ALERTED ───────────────────────────────────────────
         if state_rec.state == "ALERTED":
-            # Track is already inside restricted area.
-            # Only transition back to SAFE if it firmly crosses back to unrestricted side
-            # beyond the deadzone tolerance.
+            # Track is inside restricted area. Requires firm exit beyond deadzone tolerance * 1.5
             if curr_side == unrestricted_side:
                 dist = perpendicular_distance(boundary.point_a, boundary.point_b, curr_anchor)
-                if dist >= boundary.tolerance:
+                if dist >= boundary.tolerance * 1.5:
                     logger.info(
                         "Track #%d exited restricted zone for boundary '%s' (State: ALERTED -> SAFE)",
                         obj.track_id,
@@ -216,7 +219,6 @@ class IntrusionDetector:
             return None
 
         # ── State 2: SAFE or APPROACHING ──────────────────────────────────────
-        # Check geometric crossing
         crossed_into_restricted, direction = check_boundary_crossing(
             a=boundary.point_a,
             b=boundary.point_b,
@@ -226,7 +228,6 @@ class IntrusionDetector:
             tolerance=boundary.tolerance,
         )
 
-        # Update approach state if close on unrestricted side
         if not crossed_into_restricted:
             dist = perpendicular_distance(boundary.point_a, boundary.point_b, curr_anchor)
             if dist < boundary.tolerance * 2.5 and curr_side != boundary.restricted_side:
@@ -237,14 +238,12 @@ class IntrusionDetector:
             return None
 
         # ── Crossing Detected! ────────────────────────────────────────────────
-        # Must be moving into restricted side
         if crossed_into_restricted and not state_rec.alert_emitted:
             state_rec.state = "ALERTED"
             state_rec.alert_emitted = True
             state_rec.last_side = curr_side
 
             severity = calculate_deterministic_severity(boundary.severity, obj.class_name)
-            # Persist the event and alert atomically before real-time delivery.
             cam = camera_service.get(camera_id)
             sector = cam.sector if cam else "UNASSIGNED"
             alert_msg = (
@@ -278,9 +277,11 @@ class IntrusionDetector:
                 ),
             )
             self._events.append(event)
-            # Phase 6: only confirmed Phase 5 events are broadcast, after the
-            # ordinary REST alert has been created successfully.
-            alert_connection_manager.publish_intrusion(event, created_alert)
+            
+            # Broadcast over WebSocket only when a newly generated alert ID is created
+            if created_alert.id not in self._published_alert_ids:
+                self._published_alert_ids.add(created_alert.id)
+                alert_connection_manager.publish_intrusion(event, created_alert)
 
             logger.warning(
                 "INTRUSION DETECTED: Track #%d (%s) crossed boundary '%s' on %s [Alert: %s, Severity: %s]",
@@ -300,7 +301,10 @@ class IntrusionDetector:
         keys_to_remove = [
             k
             for k, state in self._states.items()
-            if state.camera_id == camera_id and (current_frame - state.last_seen_frame) > self._max_idle_frames
+            if state.camera_id == camera_id and (
+                (current_frame - state.last_seen_frame) > self._max_idle_frames
+                or current_frame < state.last_seen_frame
+            )
         ]
         for k in keys_to_remove:
             del self._states[k]

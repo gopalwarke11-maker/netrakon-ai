@@ -191,13 +191,15 @@ def stream_camera_file(camera_id: str):
         return RedirectResponse(url=source, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
     if source.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera has no browser-playable local file")
-    file_path = Path(source)
-    if file_path.suffix.lower() not in _BROWSER_VIDEO_SUFFIXES or not file_path.is_file():
+    
+    from app.core.demo_videos import resolve_video_file_path
+    resolved_path = resolve_video_file_path(source)
+    if resolved_path is None or not resolved_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configured camera file is unavailable")
     return FileResponse(
-        file_path,
+        resolved_path,
         media_type="video/mp4",
-        headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+        headers={"Content-Disposition": f'inline; filename="{resolved_path.name}"'},
     )
 
 

@@ -10,8 +10,11 @@ alembic>=1.13
 
 # Phase 3 — AI inference
 onnxruntime
-opencv-python
+opencv-python-headless
 numpy
 python-multipart
 boto3
-
+# Stage 3 — Security & Authentication Foundation
+argon2-cffi
+pyjwt
+email-validator

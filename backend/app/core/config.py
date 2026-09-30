@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     )
     database_url: str | None = None
 
+    # ── Stage 3: Security & Authentication Foundation ──────────────────────
+    jwt_secret_key: str = "DEV_ONLY_INSECURE_SECRET_CHANGE_IN_PRODUCTION"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 480
+
     # ── Phase 3: AI inference ──────────────────────────────────────────────
     # ONNX model name or path. Nano variant (~12 MB ONNX) is the default;
     # ONNX Runtime CPU engine provides < 200 MB RSS execution memory.
@@ -65,6 +70,15 @@ class Settings(BaseSettings):
     s3_public_url_prefix: str | None = None
     s3_presigned_expiration_seconds: int = 3600
     storage_dev_fallback_dir: str = "videos"
+
+    # ── Stage 14: SMTP & Email Service Configuration ───────────────────────
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str = "noreply@netrakon.ai"
+    smtp_from_name: str = "NetraKon AI Border Intelligence"
+
 
     @field_validator("debug", mode="before")
     @classmethod

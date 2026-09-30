@@ -1,7 +1,8 @@
-import { Activity, Bell, Shield, UserRound } from "lucide-react";
+import { Activity, Bell, LogOut, Shield, UserRound } from "lucide-react";
 import { useAlertStore } from "../../state/alertStore";
 import { alertToRecord } from "../../api/adapters";
 import { useAlerts, useBackendHealth } from "../../api/hooks";
+import { useAuthStore } from "../../state/authStore";
 
 function TopNav() {
   const resolvedAlertIds = useAlertStore((state) => state.resolvedAlertIds);
@@ -14,6 +15,13 @@ function TopNav() {
       alert.status === "ACTIVE" && !resolvedAlertIds.includes(alert.id),
   ).length;
 
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    await logout();
+    window.location.pathname = "/login";
+  };
+
   return (
     <header className="flex min-h-16 flex-wrap items-center justify-between gap-4 border-b border-[#2A3441] bg-[#141A23] px-4 py-3 sm:px-6">
       <div className="flex items-center gap-3">
@@ -24,7 +32,7 @@ function TopNav() {
           <div className="text-sm font-bold tracking-[0.18em] text-[#E6EDF3]">
             NETRAKON AI
           </div>
-          <div className="text-[9px] tracking-[0.2em] text-[#8B949E]">
+          <div className="text-[9px] tracking-[0.2em] text-[#06B6D4]">
             BORDER INTELLIGENCE SYSTEM
           </div>
         </div>
@@ -53,9 +61,36 @@ function TopNav() {
           <Bell size={14} aria-hidden="true" />
           <span>{String(activeAlertCount).padStart(2, "0")} ACTIVE ALERTS</span>
         </div>
-        <div className="hidden items-center gap-2 border-l border-[#2A3441] pl-4 text-[#8B949E] md:flex">
-          <UserRound size={14} aria-hidden="true" />
-          <span>OPERATOR // CONTROL ROOM 01</span>
+
+        {/* User Info & Logout */}
+        <div className="flex items-center gap-3 border-l border-[#2A3441] pl-4">
+          <div className="hidden items-center gap-2 text-[#8B949E] md:flex">
+            <UserRound size={14} aria-hidden="true" className="text-[#3B82F6]" />
+            <span className="font-semibold text-white">
+              {user ? user.name : "OPERATOR"}
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold ${
+                user?.role === "MAIN_ADMIN"
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                  : "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+              }`}
+            >
+              {user ? user.role : "CONTROL ROOM"}
+            </span>
+          </div>
+
+          {user && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded border border-[#2A3441] bg-[#0A0E14] px-2.5 py-1 text-[11px] font-semibold text-[#8B949E] transition hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300"
+              title="Log out of NetraKon AI"
+            >
+              <LogOut size={13} />
+              <span className="hidden sm:inline">LOGOUT</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

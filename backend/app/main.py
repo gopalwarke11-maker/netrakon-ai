@@ -15,14 +15,17 @@ from app.api.routes import (
     ai_risk,
     ai_behavior,
     ai_low_light,
+    admin_control,
     alert_websocket,
     alerts,
+    auth,
     boundaries,
     camera_processing,
     cameras,
     detections,
     health,
     intrusions,
+    password_reset,
 )
 from app.core.config import settings
 from app.services.alert_websocket import alert_connection_manager
@@ -48,9 +51,44 @@ async def lifespan(_: FastAPI):
         logger.exception("Database connection failed. Run Alembic migrations and verify DATABASE_URL.")
         raise RuntimeError("Database connection failed; NETRAKON will not use in-memory fallback.") from exc
 
+    _seed_demo_cameras()
     logger.info("NETRAKON AI backend initialized (lightweight startup, YOLO lazy loading enabled).")
     yield
     # ── Shutdown (nothing to clean up yet) ──────────────────────────────
+
+
+def _seed_demo_cameras() -> None:
+    """Ensure CAM-01 and CAM-02 demo cameras point to local demo videos."""
+    from app.db.models import CameraRecord
+    from app.db.session import SessionLocal
+
+    try:
+        with SessionLocal.begin() as db:
+            c1 = db.get(CameraRecord, "CAM-01")
+            if not c1:
+                c1 = CameraRecord(id="CAM-01")
+                db.add(c1)
+            c1.name = "Camera 1"
+            c1.sector = "SECTOR 1"
+            c1.location = "North Gate"
+            c1.status = "ONLINE"
+            c1.source_type = "FILE"
+            c1.stream_url = "camera_1.mp4"
+            c1.storage_key = None
+
+            c2 = db.get(CameraRecord, "CAM-02")
+            if not c2:
+                c2 = CameraRecord(id="CAM-02")
+                db.add(c2)
+            c2.name = "Camera 2"
+            c2.sector = "SECTOR 2"
+            c2.location = "East Border"
+            c2.status = "ONLINE"
+            c2.source_type = "FILE"
+            c2.stream_url = "camera_2.mp4"
+            c2.storage_key = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to seed default demo cameras: %s", exc)
 
 
 app = FastAPI(
@@ -69,6 +107,9 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix=settings.api_prefix)
+app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(admin_control.router, prefix=settings.api_prefix)
+app.include_router(password_reset.router, prefix=settings.api_prefix)
 app.include_router(cameras.router, prefix=settings.api_prefix)
 app.include_router(camera_processing.router, prefix=settings.api_prefix)
 app.include_router(boundaries.router, prefix=settings.api_prefix)

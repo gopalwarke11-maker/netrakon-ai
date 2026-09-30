@@ -9,10 +9,12 @@ import {
   Menu,
   ScanFace,
   Settings,
+  ShieldAlert,
   Video,
   X,
 } from "lucide-react";
 import { useBackendHealth } from "../../api/hooks";
+import { useAuthStore } from "../../state/authStore";
 import TopNav from "./TopNav";
 
 interface AppLayoutProps {
@@ -21,7 +23,7 @@ interface AppLayoutProps {
   children: ReactNode;
 }
 
-const navigation = [
+const defaultNavigation = [
   { label: "COMMAND CENTER", path: "/dashboard", icon: LayoutDashboard },
   { label: "LIVE CAMERAS", path: "/cameras/live", icon: Video },
   { label: "ALERTS", path: "/alerts", icon: Bell },
@@ -35,6 +37,7 @@ const navigation = [
 function AppLayout({ currentPath, onNavigate, children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const healthQuery = useBackendHealth();
+  const { user } = useAuthStore();
 
   const navigate = (path: string) => {
     onNavigate(path);
@@ -46,6 +49,11 @@ function AppLayout({ currentPath, onNavigate, children }: AppLayoutProps) {
     : healthQuery.isSuccess
       ? "LIVE BACKEND"
       : "OFFLINE";
+
+  const navigation = [...defaultNavigation];
+  if (user?.role === "MAIN_ADMIN") {
+    navigation.unshift({ label: "ADMIN CONTROL", path: "/admin-control", icon: ShieldAlert });
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0E14] text-[#E6EDF3]">
@@ -97,23 +105,42 @@ function AppLayout({ currentPath, onNavigate, children }: AppLayoutProps) {
           </div>
           <nav className="space-y-1 p-3" aria-label="Primary navigation">
             {navigation.map(({ label, path, icon: Icon }) => {
-              const active = currentPath === path;
+              const active = currentPath.startsWith(path);
+              const isMainAdminTab = path === "/admin-control";
               return (
                 <button
                   key={path}
                   type="button"
                   onClick={() => navigate(path)}
-                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider transition ${active ? "border-l-2 border-[#3B82F6] bg-[#3B82F6]/10 text-[#E6EDF3]" : "border-l-2 border-transparent text-[#8B949E] hover:bg-[#141A23] hover:text-[#E6EDF3]"}`}
+                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider transition ${
+                    active
+                      ? isMainAdminTab
+                        ? "border-l-2 border-cyan-400 bg-cyan-500/10 text-cyan-200"
+                        : "border-l-2 border-[#3B82F6] bg-[#3B82F6]/10 text-[#E6EDF3]"
+                      : "border-l-2 border-transparent text-[#8B949E] hover:bg-[#141A23] hover:text-[#E6EDF3]"
+                  }`}
                 >
                   <Icon
                     size={15}
-                    className={active ? "text-[#3B82F6]" : "text-[#8B949E]"}
+                    className={
+                      active
+                        ? isMainAdminTab
+                          ? "text-cyan-400"
+                          : "text-[#3B82F6]"
+                        : "text-[#8B949E]"
+                    }
                     aria-hidden="true"
                   />
                   {label}
                   <ChevronRight
                     size={12}
-                    className={`ml-auto ${active ? "text-[#3B82F6]" : "opacity-0"}`}
+                    className={`ml-auto ${
+                      active
+                        ? isMainAdminTab
+                          ? "text-cyan-400"
+                          : "text-[#3B82F6]"
+                        : "opacity-0"
+                    }`}
                     aria-hidden="true"
                   />
                 </button>

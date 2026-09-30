@@ -42,6 +42,20 @@ class IntrusionService:
         Also calculates and persists risk assessment.
         """
         with SessionLocal.begin() as db:
+            # Check if an active alert for this camera_id, boundary_id, and track_id already exists
+            existing_active_alert = db.scalars(
+                select(AlertRecord).where(
+                    AlertRecord.camera_id == event.camera_id,
+                    AlertRecord.boundary_id == event.boundary_id,
+                    AlertRecord.track_id == str(event.track_id),
+                    AlertRecord.status == "ACTIVE",
+                )
+            ).first()
+            if existing_active_alert:
+                existing_event_row = db.get(IntrusionEventRecord, existing_active_alert.event_id)
+                existing_evt = _event(existing_event_row) if existing_event_row else event
+                return existing_evt, _alert(existing_active_alert)
+
             # Count prior intrusions for this camera/boundary/track (for repeat_count)
             prior_count = db.scalars(
                 select(IntrusionEventRecord).where(

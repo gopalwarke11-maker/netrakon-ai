@@ -83,13 +83,14 @@ def test_camera_stream_connectivity(source_type: str, stream_url: str) -> Camera
 
     # 2. Handle Local FILE source
     if source_type == "FILE" and not url_clean.lower().startswith(("http://", "https://")):
-        file_path = Path(url_clean)
-        if file_path.is_file():
+        from app.core.demo_videos import resolve_video_file_path
+        resolved = resolve_video_file_path(url_clean)
+        if resolved and resolved.is_file():
             return CameraTestResponse(
                 is_reachable=True,
                 status="REACHABLE",
-                message=f"Local video file found at '{file_path.name}'.",
-                details={"path": str(file_path), "size_bytes": file_path.stat().st_size},
+                message=f"Local video file found at '{resolved.name}'.",
+                details={"path": str(resolved), "size_bytes": resolved.stat().st_size},
             )
         return CameraTestResponse(
             is_reachable=False,

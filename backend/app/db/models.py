@@ -122,3 +122,48 @@ class BehaviorObservationRecord(Base):
 
 Index("ix_behavior_observations_camera_track", BehaviorObservationRecord.camera_id, BehaviorObservationRecord.track_id)
 Index("ix_behavior_observations_type", BehaviorObservationRecord.behavior_type)
+
+
+class UserRecord(Base):
+    """User account model for NETRAKON AI operators and administrators."""
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="ADMIN", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PasswordResetRequestRecord(Base):
+    """Password assistance request model submitted by users to Main Admin."""
+    __tablename__ = "password_reset_requests"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", index=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    handled_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[UserRecord] = relationship("UserRecord", foreign_keys=[user_id], backref="reset_requests")
+    handler: Mapped[UserRecord | None] = relationship("UserRecord", foreign_keys=[handled_by])
+
+
+class LoginActivityRecord(Base):
+    """Audit log of successful and failed authentication attempts."""
+    __tablename__ = "login_activity"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    email_attempted: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    login_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
+    failure_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    user: Mapped[UserRecord | None] = relationship("UserRecord")

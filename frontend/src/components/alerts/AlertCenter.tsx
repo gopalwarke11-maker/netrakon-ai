@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, Search, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ArrowUp, Check, Search, ShieldAlert } from "lucide-react";
 import { useAlertStore } from "../../state/alertStore";
 import { alertToRecord } from "../../api/adapters";
 import { getRiskAssessment, updateAlert } from "../../api/alerts";
@@ -21,15 +21,43 @@ function AlertCenter() {
   const [sectorFilter, setSectorFilter] = useState("ALL");
   const [alertView, setAlertView] = useState<"ACTIVE" | "RESOLVED">("ACTIVE");
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord>();
+
+  // Scroll preservation & auto-scroll states
+  const listRef = useRef<HTMLDivElement>(null);
+  const [isScrolledDown, setIsScrolledDown] = useState(false);
+  const [hasNewUnseen, setHasNewUnseen] = useState(false);
+
   const resolvedAlertIds = useAlertStore((state) => state.resolvedAlertIds);
   const resolveAlert = useAlertStore((state) => state.resolveAlert);
   const queryClient = useQueryClient();
   const alertsQuery = useAlerts();
   const camerasQuery = useCameras();
-  const alerts = useMemo(
-    () => alertsQuery.data?.map(alertToRecord) ?? [],
-    [alertsQuery.data],
-  );
+
+  // Deduplicate raw alerts by alert.id to prevent frontend duplicate rendering
+  const alerts = useMemo(() => {
+    const rawList = alertsQuery.data?.map(alertToRecord) ?? [];
+    const seen = new Set<string>();
+    const uniqueList: AlertRecord[] = [];
+    for (const item of rawList) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        uniqueList.push(item);
+      }
+    }
+    return uniqueList;
+  }, [alertsQuery.data]);
+
+  const previousAlertCountRef = useRef(alerts.length);
+
+  useEffect(() => {
+    if (alerts.length > previousAlertCountRef.current) {
+      if (isScrolledDown) {
+        setHasNewUnseen(true);
+      }
+    }
+    previousAlertCountRef.current = alerts.length;
+  }, [alerts.length, isScrolledDown]);
+
   const cameraOptions = useMemo(
     () => (camerasQuery.data ?? []).map((camera) => camera.id).sort(),
     [camerasQuery.data],
@@ -71,6 +99,7 @@ function AlertCenter() {
     selectedAlert && alerts.some((alert) => alert.id === selectedAlert.id)
       ? selectedAlert
       : visibleAlerts[0];
+
   const riskQuery = useQuery({
     queryKey: ["risk", displayedAlert?.eventId],
     queryFn: () => getRiskAssessment(displayedAlert!.eventId!),
@@ -95,9 +124,28 @@ function AlertCenter() {
     }
   };
 
+  const handleScroll = () => {
+    if (listRef.current) {
+      const scrolled = listRef.current.scrollTop > 30;
+      setIsScrolledDown(scrolled);
+      if (!scrolled) {
+        setHasNewUnseen(false);
+      }
+    }
+  };
+
+  const scrollToTop = () => {
+    if (listRef.current) {
+      listRef.current.scrollTo({ top: 0, behavior: "smooth" });
+      setIsScrolledDown(false);
+      setHasNewUnseen(false);
+    }
+  };
+
   return (
-    <section className="overflow-hidden border border-[#2A3441] bg-[#141A23]">
-      <div className="flex items-center justify-between border-b border-[#2A3441] px-4 py-3">
+    <section className="flex flex-col overflow-hidden rounded-lg border border-[#2A3441] bg-[#141A23]">
+      {/* Top Header - Fixed */}
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-[#2A3441] px-4 py-3">
         <div className="flex items-center gap-2">
           <ShieldAlert size={15} className="text-red-400" aria-hidden="true" />
           <h2 className="text-xs font-semibold tracking-[0.15em]">
@@ -113,13 +161,15 @@ function AlertCenter() {
               : "LIVE BACKEND"}
         </span>
       </div>
+
       {alertsQuery.isLoading && (
-        <p className="border-b border-[#2A3441] px-4 py-2 text-[10px] text-[#8B949E]">
+        <p className="flex-shrink-0 border-b border-[#2A3441] px-4 py-2 text-[10px] text-[#8B949E]">
           LOADING ALERTS...
         </p>
       )}
+
       {alertsQuery.isError && (
-        <div className="flex items-center justify-between border-b border-orange-400/40 bg-orange-400/5 px-4 py-2 text-[10px] text-orange-200">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-orange-400/40 bg-orange-400/5 px-4 py-2 text-[10px] text-orange-200">
           <span>BACKEND UNAVAILABLE // NO ALERT HISTORY</span>
           <button
             type="button"
@@ -130,7 +180,9 @@ function AlertCenter() {
           </button>
         </div>
       )}
-      <div className="flex border-b border-[#2A3441] px-3 pt-3">
+
+      {/* Tabs Header - Fixed */}
+      <div className="flex flex-shrink-0 border-b border-[#2A3441] px-3 pt-3">
         {(["ACTIVE", "RESOLVED"] as const).map((view) => (
           <button
             key={view}
@@ -151,7 +203,9 @@ function AlertCenter() {
           </button>
         ))}
       </div>
-      <div className="grid gap-3 border-b border-[#2A3441] p-3 sm:grid-cols-2 lg:grid-cols-4">
+
+      {/* Search & Filter Controls - Fixed */}
+      <div className="grid flex-shrink-0 gap-3 border-b border-[#2A3441] p-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="relative sm:col-span-2 lg:col-span-1">
           <Search
             size={13}
@@ -199,13 +253,34 @@ function AlertCenter() {
           ))}
         </select>
       </div>
-      <div className="grid lg:grid-cols-[1.2fr_1fr]">
-        <div className="divide-y divide-[#2A3441]">
+
+      {/* Main Content Area - Scrollable */}
+      <div className="grid flex-1 min-h-0 lg:grid-cols-[1.2fr_1fr]">
+        {/* Left Scrollable Alert List */}
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          className="relative max-h-[460px] flex-1 overflow-y-auto divide-y divide-[#2A3441]"
+        >
+          {/* New Alerts Floating Pill */}
+          {isScrolledDown && hasNewUnseen && (
+            <div className="sticky top-2 z-10 flex justify-center py-1">
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="flex items-center gap-1.5 rounded-full bg-[#3B82F6] px-3 py-1 text-[10px] font-bold text-white shadow-lg transition hover:bg-blue-600"
+              >
+                <ArrowUp size={12} /> NEW ALERTS
+              </button>
+            </div>
+          )}
+
           {visibleAlerts.length === 0 && (
             <p className="p-5 text-xs text-[#8B949E]">
               No {alertView.toLowerCase()} alerts match the selected filters.
             </p>
           )}
+
           {visibleAlerts.map((alert) => (
             <button
               key={alert.id}
@@ -244,8 +319,10 @@ function AlertCenter() {
             </button>
           ))}
         </div>
+
+        {/* Right Detail Pane */}
         {displayedAlert && (
-          <div className="border-t border-[#2A3441] p-4 lg:border-l lg:border-t-0">
+          <div className="max-h-[460px] overflow-y-auto border-t border-[#2A3441] p-4 lg:border-l lg:border-t-0">
             <div className="flex items-center justify-between">
               <span className="text-[10px] tracking-[0.15em] text-[#8B949E]">
                 ALERT DETAILS

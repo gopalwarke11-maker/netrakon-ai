@@ -17,6 +17,7 @@ dist-ssr
 backend/venv/
 backend/.env
 backend/videos/
+!backend/demo_videos/*.mp4
 .env
 __pycache__/
 *.pyc
@@ -33,3 +34,4 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
+desktop.ini

@@ -16,11 +16,23 @@ import SectorRiskMap from "./components/map/SectorRiskMap";
 import SystemOverview from "./components/layout/SystemOverview";
 import { useAlertWebSocket } from "./hooks/useAlertWebSocket";
 
+import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AdminControlPage from "./pages/AdminControlPage";
+import { useAuthStore } from "./state/authStore";
+
 function App() {
   useAlertWebSocket();
   const [path, setPath] = useState(() =>
     window.location.pathname === "/" ? "/dashboard" : window.location.pathname,
   );
+
+  const { checkAuth, isAuthenticated, authInitialized, user } = useAuthStore();
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   useEffect(() => {
     if (window.location.pathname === "/")
@@ -36,14 +48,72 @@ function App() {
     setPath(nextPath);
   };
 
+  if (path === "/forgot-password") {
+    return <ForgotPasswordPage onNavigate={navigate} />;
+  }
+
+  if (path.startsWith("/reset-password")) {
+    return <ResetPasswordPage onNavigate={navigate} />;
+  }
+
+  if (path === "/login") {
+    if (authInitialized && isAuthenticated) {
+      const redirectPath = user?.role === "MAIN_ADMIN" ? "/admin-control" : "/dashboard";
+      window.history.replaceState({}, "", redirectPath);
+      return (
+        <AppLayout currentPath={redirectPath} onNavigate={navigate}>
+          {renderPage(redirectPath, navigate, user, authInitialized, isAuthenticated)}
+        </AppLayout>
+      );
+    }
+    return <LoginPage onNavigate={navigate} />;
+  }
+
   return (
     <AppLayout currentPath={path} onNavigate={navigate}>
-      {renderPage(path, navigate)}
+      {renderPage(path, navigate, user, authInitialized, isAuthenticated)}
     </AppLayout>
   );
 }
 
-function renderPage(path: string, navigate: (path: string) => void) {
+function renderPage(
+  path: string,
+  navigate: (path: string) => void,
+  user: any,
+  authInitialized: boolean,
+  isAuthenticated: boolean,
+) {
+  if (path.startsWith("/admin-control")) {
+    if (!authInitialized) {
+      return (
+        <div className="flex h-64 items-center justify-center text-xs text-[#8B949E]">
+          Initializing NetraKon security session...
+        </div>
+      );
+    }
+    if (!isAuthenticated || !user) {
+      return <LoginPage onNavigate={navigate} />;
+    }
+    if (user.role !== "MAIN_ADMIN") {
+      return (
+        <div className="p-8 text-center">
+          <h2 className="text-xl font-bold text-red-400">403 Forbidden</h2>
+          <p className="mt-2 text-sm text-[#8B949E]">
+            Main Administrator privilege required to access Admin Control.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="mt-4 rounded bg-[#3B82F6] px-4 py-2 text-xs font-semibold text-white"
+          >
+            Return to Command Center
+          </button>
+        </div>
+      );
+    }
+    return <AdminControlPage onNavigate={navigate} currentSubPath={path} />;
+  }
+
   switch (path) {
     case "/dashboard":
       return <Dashboard />;

@@ -133,6 +133,8 @@ def is_remote_video_url(source: str | int | None) -> bool:
     return any(path.endswith(ext) for ext in {".mp4", ".webm", ".mov", ".avi", ".mkv"})
 
 
+from app.core.demo_videos import resolve_video_file_path
+
 class FileVideoSource(OpenCVVideoSource):
     """File video source supporting local paths, remote HTTP/HTTPS video URLs, and S3 storage keys."""
 
@@ -199,7 +201,9 @@ class FileVideoSource(OpenCVVideoSource):
                 self.cleanup()
                 return False
             return True
-        self._capture = cv2.VideoCapture(self.source)
+        resolved = resolve_video_file_path(self.source)
+        target = str(resolved) if resolved else str(self.source)
+        self._capture = cv2.VideoCapture(target)
         return self.is_opened()
 
     def rewind(self) -> bool:
@@ -211,8 +215,12 @@ class FileVideoSource(OpenCVVideoSource):
                 return True
         if self._capture is not None:
             self._capture.release()
-        target = str(self._temp_path) if self._temp_path else self.source
-        self._capture = cv2.VideoCapture(str(target))
+        target = (
+            str(self._temp_path)
+            if self._temp_path
+            else (str(resolve_video_file_path(self.source) or self.source))
+        )
+        self._capture = cv2.VideoCapture(target)
         return self.is_opened()
 
     def release(self) -> None:
@@ -532,6 +540,8 @@ class CameraProcessor:
                             self._last_detections = []
                             self._latest_processed_jpeg = None
                             self._status = self._status.model_copy(update={"active_tracks": 0})
+                        from app.ai.intrusion_detector import intrusion_detector
+                        intrusion_detector.clear_camera(self.camera_id)
                         if hasattr(source, "rewind") and source.rewind():
                             continue
                         source.release()

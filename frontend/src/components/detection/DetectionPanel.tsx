@@ -92,8 +92,9 @@ function DetectionPanel() {
   ];
 
   return (
-    <section className="border border-[#2A3441] bg-[#141A23]">
-      <div className="flex items-center justify-between border-b border-[#2A3441] px-4 py-3">
+    <section className="flex flex-col overflow-hidden rounded-lg border border-[#2A3441] bg-[#141A23] max-h-[580px]">
+      {/* Header - Fixed */}
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-[#2A3441] px-4 py-3">
         <div className="flex items-center gap-2">
           <ScanFace size={15} className="text-cyan-300" aria-hidden="true" />
           <h2 className="text-xs font-semibold tracking-[0.15em]">
@@ -108,13 +109,15 @@ function DetectionPanel() {
               : "LIVE BACKEND"}
         </span>
       </div>
+
       {summariesQuery.isLoading && (
-        <p className="border-b border-[#2A3441] px-4 py-2 text-[10px] text-[#8B949E]">
+        <p className="flex-shrink-0 border-b border-[#2A3441] px-4 py-2 text-[10px] text-[#8B949E]">
           LOADING DETECTIONS...
         </p>
       )}
+
       {summariesQuery.isError && (
-        <div className="flex items-center justify-between border-b border-orange-400/40 bg-orange-400/5 px-4 py-2 text-[10px] text-orange-200">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-orange-400/40 bg-orange-400/5 px-4 py-2 text-[10px] text-orange-200">
           <span>BACKEND UNAVAILABLE // NO DETECTION DATA</span>
           <button
             type="button"
@@ -125,7 +128,9 @@ function DetectionPanel() {
           </button>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-px border-b border-[#2A3441] bg-[#2A3441] sm:grid-cols-3">
+
+      {/* Metrics Summary Grid - Fixed */}
+      <div className="grid flex-shrink-0 grid-cols-2 gap-px border-b border-[#2A3441] bg-[#2A3441] sm:grid-cols-3">
         {metrics.map(([label, value]) => (
           <div key={label} className="bg-[#141A23] p-3">
             <p className="text-[9px] leading-tight text-[#8B949E]">{label}</p>
@@ -133,7 +138,9 @@ function DetectionPanel() {
           </div>
         ))}
       </div>
-      <div className="divide-y divide-[#2A3441]">
+
+      {/* Independent Scrollable Track List Container */}
+      <div className="flex-1 overflow-y-auto max-h-[300px] divide-y divide-[#2A3441]">
         {!summariesQuery.isLoading && tracks.length === 0 && (
           <p className="p-5 text-xs text-[#8B949E]">
             NO ACTIVE TRACKS // NO DETECTION DATA
@@ -144,7 +151,7 @@ function DetectionPanel() {
             key={track.trackId}
             type="button"
             onClick={() => setSelectedTrack(track.trackId)}
-            className={`flex w-full items-center justify-between p-3 text-left hover:bg-[#0A0E14] ${selectedTrack.trackId === track.trackId ? "bg-[#0A0E14]" : ""}`}
+            className={`flex w-full items-center justify-between p-3 text-left hover:bg-[#0A0E14] ${selectedTrack?.trackId === track.trackId ? "bg-[#0A0E14]" : ""}`}
           >
             <div className="flex items-center gap-3">
               <span className="grid size-7 place-items-center border border-cyan-400/40 text-cyan-300">
@@ -171,8 +178,10 @@ function DetectionPanel() {
           </button>
         ))}
       </div>
+
+      {/* Selected Track Detail Footer Pane */}
       {selectedTrack && (
-        <div className="border-t border-[#2A3441] p-4">
+        <div className="flex-shrink-0 border-t border-[#2A3441] p-4 bg-[#0D1219]">
           <div className="flex items-center justify-between">
             <span className="text-[10px] tracking-[0.15em] text-[#8B949E]">
               SELECTED TRACK
@@ -182,7 +191,7 @@ function DetectionPanel() {
               {selectedTrack.status}
             </span>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[10px]">
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
             {[
               ["TRACK ID", selectedTrack.rawTrackId],
               ["OBJECT", selectedTrack.objectType],
@@ -192,9 +201,6 @@ function DetectionPanel() {
               ["RISK", selectedTrack.risk],
               ["FIRST DETECTED", selectedTrack.firstDetected],
               ["LAST SEEN", selectedTrack.lastSeen],
-              ["DIRECTION", selectedTrack.direction],
-              ["SPEED", selectedTrack.speed],
-              ["OBSERVATIONS", selectedTrack.framesSeen],
             ].map(([label, value]) => (
               <div key={label}>
                 <dt className="text-[#8B949E]">{label}</dt>
